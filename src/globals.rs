@@ -13,12 +13,28 @@ use std::fs::create_dir_all;
 // There are gonna be a few of these, just helps prevent unneeded wrapping :p
 type Event = DidReceiveGlobalSettingsEvent;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GlobalSettings {
     pub pre_buffer_ms: u32,
     pub samples_directory: String,
+
+    pub capture_device: String,
+    pub playback_device: String,
 }
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        Self {
+            pre_buffer_ms: 0,
+            samples_directory: "".to_string(),
+            capture_device: "@DEFAULT_SOURCE@".to_string(),
+            playback_device: "@DEFAULT_SINK@".to_string(),
+        }
+    }
+}
+
+
 
 pub struct Globals;
 pub static GLOBALS: Globals = Globals;

@@ -13,11 +13,11 @@
 <sdpi-heading>Plugin</sdpi-heading>
 
 <sdpi-item label="Record from">
-    <sdpi-select setting="record_source" datasource="getSources" hot-reload show-refresh loading="Loading…"></sdpi-select>
+    <sdpi-select global setting="capture_device" datasource="getSources" hot-reload show-refresh loading="Loading…"></sdpi-select>
 </sdpi-item>
 
 <sdpi-item label="Play to">
-    <sdpi-select setting="playback_sinks" datasource="getSinks" hot-reload show-refresh loading="Loading…"></sdpi-select>
+    <sdpi-select global setting="playback_device" datasource="getSinks" hot-reload show-refresh loading="Loading…"></sdpi-select>
 </sdpi-item>
 
 <sdpi-item label="Pre-buffer">

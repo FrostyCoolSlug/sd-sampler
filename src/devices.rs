@@ -1,9 +1,8 @@
 //! Ok, we need to fetch all the devices, use cpal for this..
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result};
 use cpal::Device;
 use cpal::traits::{DeviceTrait, HostTrait};
-use log::debug;
 use serde_json::{Value, json};
 
 #[derive(Debug)]
