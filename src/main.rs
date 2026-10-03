@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod globals;
 pub mod devices;
+pub mod audio;
 
 use std::env;
 use openaction::{run, OpenActionResult, register_action};

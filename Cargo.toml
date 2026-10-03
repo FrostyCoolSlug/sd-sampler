@@ -28,3 +28,10 @@ openaction = "2.7.0"
 
 ### PulseAudio Handlers
 cpal = { version = "0.18.2", features = ["pulseaudio"]}
+
+### Audio File Handling
+hound = "3.5"
+ebur128 = "0.1"
+rb = "0.4"
+atomic_float = "1"
+symphonia = { version = "0.5", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3"] }
