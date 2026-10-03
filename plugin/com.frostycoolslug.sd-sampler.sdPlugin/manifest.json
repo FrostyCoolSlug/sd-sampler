@@ -1,0 +1,35 @@
+{
+  "Name": "SD Sampler",
+  "Version": "0.3.0.0",
+  "Author": "sd-sampler",
+  "Description": "A Sampler plugin for OpenDeck on Linux, inspired by the GoXLR",
+  "Icon": "icons/plugin",
+
+  "Category": "Sampler",
+  "CategoryIcon": "icons/plugin",
+
+  "CodePath": "sd-sampler",
+  "CodePathLin": "sd-sampler",
+  "SDKVersion": 2,
+
+  "OS": [
+    {
+      "Platform": "linux",
+      "MinimumVersion": "5.0"
+    }
+  ],
+
+  "Actions": [
+    {
+      "Name": "Sample Sample",
+      "UUID": "com.frostycoolslug.sd-sampler.sample",
+      "Icon": "icons/plugin",
+      "Tooltip": "Example Button for Now :)",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "property_inspector/plugin.html",
+      "States": [
+        { "Image": "icons/plugin", "ShowTitle": false }
+      ]
+    }
+  ]
+}
