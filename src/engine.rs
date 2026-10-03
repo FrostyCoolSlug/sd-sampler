@@ -9,7 +9,7 @@ use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
 use directories::BaseDirs;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use openaction::InstanceId;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -18,6 +18,14 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum PlaybackState {
+    Playing,
+    Stopping,
+    Finished,
+    None,
+}
 
 struct BackgroundRecorder {
     recorder: Arc<BufferedRecorder>,
@@ -155,7 +163,8 @@ impl Engine {
     }
 
     pub fn set_recording_device(&self, device: Option<String>) {
-        if *self.recording_device.read().unwrap() == device {
+        let is_running = self.background_record.lock().unwrap().is_some();
+        if *self.recording_device.read().unwrap() == device && is_running {
             return;
         }
 
@@ -215,7 +224,7 @@ impl Engine {
     }
 
     /// Stops playing back a sample (optional force stop)
-    fn stop(&self, instance: &InstanceId, force: bool) {
+    pub fn stop(&self, instance: &InstanceId, force: bool) {
         if let Some(player) = self.playing.lock().unwrap().get(instance) {
             let currently_stopping = player.state.stop.load(Ordering::Relaxed);
 
@@ -238,6 +247,23 @@ impl Engine {
     pub fn active_playback_file(&self, key: &InstanceId) -> Option<PathBuf> {
         let map = self.playing.lock().unwrap();
         Some(map.get(key)?.state.playing_file.clone())
+    }
+
+    pub fn get_playback_state(&self, key: &InstanceId) -> PlaybackState {
+        let map = self.playing.lock().unwrap();
+        if let Some(player) = map.get(key) {
+            if player.handle.is_finished() {
+                return PlaybackState::Finished;
+            }
+
+            if player.state.stop.load(Ordering::Relaxed) {
+                return PlaybackState::Stopping;
+            }
+
+            return PlaybackState::Playing;
+        }
+
+        PlaybackState::None
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -291,7 +317,7 @@ impl Engine {
     // Recording Tasks
     /////////////////////////////////////////////////////////////////////
 
-    pub fn record(&self, instance: &InstanceId, path: PathBuf) {
+    pub fn record(&self, instance: &InstanceId, path: PathBuf) -> Result<()> {
         if let Some(recorder) = &*self.background_record.lock().unwrap() {
             let handler_inner = recorder.recorder.clone();
 
@@ -311,14 +337,53 @@ impl Engine {
 
             let key = instance.clone();
             self.recording.lock().unwrap().insert(key, recording);
+
+            return Ok(());
         }
+        bail!("Recorder Not Available");
     }
 
-    pub fn stop_recording(&self, instance: &InstanceId) {
-        if let Some(recording) = self.recording.lock().unwrap().remove(instance) {
-            recording.state.stop.store(true, Ordering::Relaxed);
-            let _ = recording.handle.join();
+    pub fn stop_recording(&self, instance: &InstanceId) -> Result<Option<Recorded>> {
+        let recording = match self.recording.lock().unwrap().remove(instance) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        recording.state.stop.store(true, Ordering::Relaxed);
+        let outcome = recording.handle.join();
+
+        match outcome {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                error!("Recording Failed: {e}");
+                return Ok(None);
+            }
+            Err(_) => {
+                error!("Recording thread panicked");
+                return Ok(None);
+            }
         }
+
+        if !recording.path.exists() {
+            return Ok(None);
+        }
+
+        let dir = self.samples_dir();
+        let file = recording
+            .path
+            .strip_prefix(&dir)
+            .unwrap_or(&recording.path)
+            .to_string_lossy()
+            .to_string();
+
+        Ok(Some(Recorded {
+            file,
+            gain: recording.state.gain.load(Ordering::Relaxed),
+        }))
+    }
+
+    pub fn is_recording(&self, instance: &InstanceId) -> bool {
+        self.recording.lock().unwrap().contains_key(instance)
     }
 
     /// Force stop all samples from playing
@@ -330,8 +395,15 @@ impl Engine {
     }
 
     /////////////////////////////////////////////////////////////////////
-    // Recording Tasks
+    // Other Settings
     /////////////////////////////////////////////////////////////////////
+    pub(crate) fn clear_armed(&self) -> bool {
+        self.clear_armed.load(Ordering::Relaxed)
+    }
+
+    fn set_clear_armed(&self, armed: bool) {
+        self.clear_armed.store(armed, Ordering::Relaxed)
+    }
 
     ////
     /// Used for Cleaning Up anything that may have completed
