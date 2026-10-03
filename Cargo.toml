@@ -6,3 +6,15 @@ edition = "2024"
 description = "Sampler plugin for OpenDeck on Linux, inspired by the GoXLR"
 
 [dependencies]
+### Logging ###
+log = "0.4"
+simplelog = "0.12"
+
+### Error Handling ###
+anyhow = "1"
+
+### TokIO ###
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+### Stream Deck ###
+openaction = "2.7.0"
