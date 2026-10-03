@@ -32,7 +32,7 @@ async fn main() -> OpenActionResult<()> {
     }
     set_global_event_handler(&globals::GLOBALS);
 
-    register_action(actions::sample::SampleAction).await;
+    register_action(actions::pad::PadAction).await;
 
     // Run the Ticker
     tokio::spawn(ticker());

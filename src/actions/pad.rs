@@ -94,10 +94,10 @@ pub enum ReleaseAction {
     Nothing,
 }
 
-pub struct SampleAction;
+pub struct PadAction;
 
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct SampleActionSettings {
+pub struct PadActionSettings {
     pub name: String,
 
     pub function: PlaybackMode,
@@ -108,9 +108,9 @@ pub struct SampleActionSettings {
 }
 
 #[async_trait]
-impl Action for SampleAction {
-    const UUID: &'static str = "com.frostycoolslug.sd-sampler.sample";
-    type Settings = SampleActionSettings;
+impl Action for PadAction {
+    const UUID: &'static str = "com.frostycoolslug.sd-sampler.pad";
+    type Settings = PadActionSettings;
 
     async fn key_down(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
         let id = i.instance_id.clone();
@@ -137,7 +137,7 @@ impl Action for SampleAction {
                             let cursor = if s.cursor >= tracks { 0 } else { s.cursor };
 
                             // Increment the Cursor
-                            let settings = SampleActionSettings {
+                            let settings = PadActionSettings {
                                 cursor: cursor + 1,
                                 ..s.clone()
                             };
@@ -218,8 +218,8 @@ impl Action for SampleAction {
     }
 }
 
-impl SampleAction {
-    pub fn get_press(&self, id: &InstanceId, s: &SampleActionSettings) -> PressAction {
+impl PadAction {
+    pub fn get_press(&self, id: &InstanceId, s: &PadActionSettings) -> PressAction {
         if s.tracks.is_empty() {
             return PressAction::Record;
         }
@@ -245,7 +245,7 @@ impl SampleAction {
         }
     }
 
-    pub fn get_release(&self, id: &InstanceId, s: &SampleActionSettings) -> ReleaseAction {
+    pub fn get_release(&self, id: &InstanceId, s: &PadActionSettings) -> ReleaseAction {
         let is_recording = engine().is_recording(id);
 
         if s.tracks.is_empty() {

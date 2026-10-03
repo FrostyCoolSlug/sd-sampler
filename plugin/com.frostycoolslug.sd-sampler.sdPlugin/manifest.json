@@ -21,10 +21,10 @@
 
   "Actions": [
     {
-      "Name": "Sample Sample",
-      "UUID": "com.frostycoolslug.sd-sampler.sample",
+      "Name": "Sample Pad",
+      "UUID": "com.frostycoolslug.sd-sampler.pad",
       "Icon": "icons/plugin",
-      "Tooltip": "Example Button for Now :)",
+      "Tooltip": "Button for playing and recording samples",
       "Controllers": ["Keypad"],
       "PropertyInspectorPath": "property_inspector/plugin.html",
       "States": [

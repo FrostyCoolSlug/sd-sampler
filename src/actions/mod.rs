@@ -1,6 +1,6 @@
 use openaction::{Instance, OpenActionResult};
 
-pub mod sample;
+pub mod pad;
 
 pub async fn alert_on_error<T>(i: &Instance, r: anyhow::Result<T>) -> OpenActionResult<Option<T>> {
     match r {
