@@ -1,0 +1,8 @@
+[package]
+name = "sd-sampler"
+version = "0.1.0"
+edition = "2024"
+
+description = "Sampler plugin for OpenDeck on Linux, inspired by the GoXLR"
+
+[dependencies]
