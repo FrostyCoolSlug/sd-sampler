@@ -9,18 +9,19 @@ use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
 use directories::BaseDirs;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use openaction::InstanceId;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-struct Source {
+struct BackgroundRecorder {
     recorder: Arc<BufferedRecorder>,
-    holders: HashSet<String>,
+    handle: JoinHandle<()>,
 }
 
 /// An actively occurring Playback
@@ -59,7 +60,7 @@ pub struct Engine {
     playback_device: RwLock<Option<String>>,
     recording_device: RwLock<Option<String>>,
 
-    sources: Mutex<HashMap<String, Source>>,
+    background_record: Mutex<Option<BackgroundRecorder>>,
 
     /// Actively Playing Monitor
     playing: Mutex<HashMap<InstanceId, ActivePlayback>>,
@@ -97,7 +98,8 @@ impl Engine {
             playback_device: RwLock::new(None),
             recording_device: RwLock::new(None),
 
-            sources: Mutex::new(HashMap::new()),
+            background_record: Mutex::new(None),
+
             playing: Mutex::new(HashMap::new()),
             recording: Mutex::new(HashMap::new()),
             cursors: Mutex::new(HashMap::new()),
@@ -121,6 +123,8 @@ impl Engine {
         }
 
         // We need to teardown and Restart the Recording Thread
+        self.stop_recorder();
+        self.spawn_recorder();
     }
 
     /// Get the Samples Directory
@@ -147,7 +151,7 @@ impl Engine {
     }
 
     pub fn recording_device(&self) -> Option<String> {
-        self.playback_device.read().unwrap().clone()
+        self.recording_device.read().unwrap().clone()
     }
 
     pub fn set_recording_device(&self, device: Option<String>) {
@@ -155,8 +159,9 @@ impl Engine {
             return;
         }
 
-        // TODO: Teardown and Recreate Recording Handler
+        self.stop_recorder();
         *self.recording_device.write().unwrap() = device;
+        self.spawn_recorder();
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -164,25 +169,25 @@ impl Engine {
     /////////////////////////////////////////////////////////////////////
 
     /// Plays a Sample
-    pub fn play(&self, key: &InstanceId, mut audio: AudioFile, looping: bool) -> Result<()> {
+    pub fn play(&self, instance: &InstanceId, mut audio: AudioFile, looping: bool) -> Result<()> {
         audio.file = self.samples_dir().join(&audio.file);
         if !audio.file.is_file() {
             bail!("Sample not found: {}", audio.file.display());
         }
 
-        if let Some(current) = self.active_playback_file(key) {
+        if let Some(current) = self.active_playback_file(instance) {
             if current == audio.file {
-                self.restart(key);
+                self.restart(instance);
                 return Ok(());
             }
-            self.stop(key, true);
+            self.stop(instance, true);
         }
 
         let mut player = Player::new(audio, self.playback_device())?;
         let state = player.get_state();
 
         let error_slot = state.error.clone();
-        let handle = std::thread::Builder::new()
+        let handle = thread::Builder::new()
             .name("sampler-play".into())
             .spawn(move || {
                 let result = if looping {
@@ -197,7 +202,8 @@ impl Engine {
 
         let playback = ActivePlayback { state, handle };
 
-        self.playing.lock().unwrap().insert(key.clone(), playback);
+        let key = instance.clone();
+        self.playing.lock().unwrap().insert(key, playback);
         Ok(())
     }
 
@@ -211,9 +217,9 @@ impl Engine {
     /// Stops playing back a sample (optional force stop)
     fn stop(&self, instance: &InstanceId, force: bool) {
         if let Some(player) = self.playing.lock().unwrap().get(instance) {
-            let currently_stopping = player.state.stopping.load(Ordering::Relaxed);
+            let currently_stopping = player.state.stop.load(Ordering::Relaxed);
 
-            player.state.stopping.store(true, Ordering::Relaxed);
+            player.state.stop.store(true, Ordering::Relaxed);
             if force || currently_stopping {
                 player.state.force_stop.store(true, Ordering::Relaxed);
             }
@@ -222,10 +228,8 @@ impl Engine {
 
     /// Force stop all samples from playing
     fn stop_all(&self) {
-        debug!("Stopping All Samples..");
         let instances: Vec<InstanceId> = self.playing.lock().unwrap().keys().cloned().collect();
         for instance in instances {
-            debug!("Triggering Stop for Instance: {}", instance);
             self.stop(&instance, true);
         }
     }
@@ -236,6 +240,100 @@ impl Engine {
         Some(map.get(key)?.state.playing_file.clone())
     }
 
+    /////////////////////////////////////////////////////////////////////
+    // Recording Background
+    /////////////////////////////////////////////////////////////////////
+
+    pub fn spawn_recorder(&self) {
+        info!("Starting Background Recorder..");
+
+        // Should be simple, we take the information we have, spawn up our thread, and let it run
+        let device = self.recording_device();
+        debug!("Device: {:?}", device);
+
+        let buffer = self.pre_buffer_ms() as usize;
+
+        let Ok(recorder) = BufferedRecorder::new(device, buffer) else {
+            warn!("Failed to spawn BufferedRecorder");
+            return;
+        };
+
+        let arc_recorder = Arc::new(recorder);
+        let inner_recorder = arc_recorder.clone();
+
+        debug!("Spawning Background Recording Thread..");
+        let handle = thread::spawn(move || inner_recorder.listen());
+        let background_recoder = BackgroundRecorder {
+            recorder: arc_recorder,
+            handle,
+        };
+
+        info!("Background Recorder Running..");
+        *self.background_record.lock().unwrap() = Some(background_recoder);
+    }
+
+    pub fn stop_recorder(&self) {
+        info!("Stopping Background Recorder");
+        if let Some(bg) = self.background_record.lock().unwrap().take() {
+            info!("Background Recorder Found, Triggering Stop..");
+            bg.recorder.as_ref().stop();
+
+            info!("Waiting for Background Recorder Stop to Complete..");
+            let _ = bg.handle.join();
+
+            info!("Background Recorder Stopped.");
+        }
+
+        self.stop_all_recordings();
+    }
+
+    /////////////////////////////////////////////////////////////////////
+    // Recording Tasks
+    /////////////////////////////////////////////////////////////////////
+
+    pub fn record(&self, instance: &InstanceId, path: PathBuf) {
+        if let Some(recorder) = &*self.background_record.lock().unwrap() {
+            let handler_inner = recorder.recorder.clone();
+
+            let state = handler_inner.new_state();
+            let state_inner = state.clone();
+
+            let path = self.samples_dir().join(path);
+            let path_inner = path.clone();
+
+            let handle = thread::spawn(move || handler_inner.record(&path_inner, state_inner));
+            let recording = ActiveRecording {
+                path,
+                state,
+                handle,
+                started: Instant::now(),
+            };
+
+            let key = instance.clone();
+            self.recording.lock().unwrap().insert(key, recording);
+        }
+    }
+
+    pub fn stop_recording(&self, instance: &InstanceId) {
+        if let Some(recording) = self.recording.lock().unwrap().remove(instance) {
+            recording.state.stop.store(true, Ordering::Relaxed);
+            let _ = recording.handle.join();
+        }
+    }
+
+    /// Force stop all samples from playing
+    fn stop_all_recordings(&self) {
+        let instances: Vec<InstanceId> = self.recording.lock().unwrap().keys().cloned().collect();
+        for instance in instances {
+            self.stop_recording(&instance);
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////
+    // Recording Tasks
+    /////////////////////////////////////////////////////////////////////
+
+    ////
     /// Used for Cleaning Up anything that may have completed
     pub fn cleanup(&self) {
         let mut map = self.playing.lock().unwrap();
@@ -252,5 +350,19 @@ impl Engine {
             }
             true
         });
+
+        let mut map = self.recording.lock().unwrap();
+        map.retain(|_, recorder| {
+            if recorder.handle.is_finished() {
+                return false;
+            }
+            true
+        });
+
+        if let Some(check) = &*self.background_record.lock().unwrap() {
+            if check.handle.is_finished() {
+                warn!("Background Recorder Stopped Unexpectedly!");
+            }
+        }
     }
 }

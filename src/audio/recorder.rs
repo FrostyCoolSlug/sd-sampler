@@ -24,7 +24,7 @@ static READ_TIMEOUT: Duration = Duration::from_millis(100);
 static CHECK_PERIOD: Duration = Duration::from_secs(60 * 15);
 
 pub struct BufferedRecorder {
-    device: String,
+    device: Option<String>,
     producers: Mutex<Vec<RingProducer>>,
     buffer_size: usize,
     buffer: RingBuffer<f32>,
@@ -53,7 +53,7 @@ impl Debug for BufferedRecorder {
 }
 
 impl BufferedRecorder {
-    pub fn new(device: String, buffer_millis: usize) -> Result<Self> {
+    pub fn new(device: Option<String>, buffer_millis: usize) -> Result<Self> {
         // We need to attempt to accommodate for the time it takes between a user hitting a button
         // on the device, and us being signalled for record.
         //
@@ -72,6 +72,13 @@ impl BufferedRecorder {
         })
     }
 
+    pub fn new_state(&self) -> RecorderState {
+        RecorderState {
+            stop: Arc::new(AtomicBool::new(false)),
+            gain: Arc::new(AtomicF64::new(1.)),
+        }
+    }
+
     pub fn listen(&self) {
         debug!("Starting Audio Listener..");
 
@@ -82,7 +89,7 @@ impl BufferedRecorder {
         while !self.stop.load(Ordering::Relaxed) {
             if input.is_none() {
                 let spec = AudioSpecification {
-                    device: Some(self.device.clone()),
+                    device: self.device.clone(),
                     rate: 48000,
                     channels: 2,
                     buffer: 0,
@@ -186,7 +193,7 @@ impl BufferedRecorder {
 
     pub fn record(&self, path: &Path, state: RecorderState) -> Result<()> {
         if !self.is_ready() {
-            warn!("Record source '{}' is not available", self.device);
+            warn!("Record source '{:?}' is not available", self.device);
             bail!("Attempted to start a recording on an unprepared Sampler");
         }
 

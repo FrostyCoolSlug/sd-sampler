@@ -467,7 +467,7 @@ impl Player {
     pub fn get_state(&self) -> PlayerState {
         PlayerState {
             playing_file: self.file.clone(),
-            stopping: self.stopping.clone(),
+            stop: self.stopping.clone(),
             force_stop: self.force_stop.clone(),
             restart_track: self.restart_track.clone(),
             progress: self.progress.clone(),
@@ -482,7 +482,7 @@ pub struct PlayerState {
     // Note the file being played..
     pub playing_file: PathBuf,
 
-    pub stopping: Arc<AtomicBool>,
+    pub stop: Arc<AtomicBool>,
     pub force_stop: Arc<AtomicBool>,
 
     // Used for triggering a seek back to the beginning
