@@ -401,7 +401,7 @@ impl Engine {
         self.clear_armed.load(Ordering::Relaxed)
     }
 
-    fn set_clear_armed(&self, armed: bool) {
+    pub(crate) fn set_clear_armed(&self, armed: bool) {
         self.clear_armed.store(armed, Ordering::Relaxed)
     }
 
