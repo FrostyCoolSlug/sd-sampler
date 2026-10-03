@@ -25,3 +25,6 @@ directories = "6.0"
 
 ### Stream Deck ###
 openaction = "2.7.0"
+
+### PulseAudio Handlers
+pulsectl-rs = "0.3"

@@ -1,8 +1,9 @@
 pub mod actions;
 pub mod globals;
+pub mod devices;
 
 use std::env;
-use openaction::{run, OpenActionResult};
+use openaction::{run, OpenActionResult, register_action};
 use openaction::global_events::set_global_event_handler;
 
 #[tokio::main]
@@ -20,6 +21,8 @@ async fn main() -> OpenActionResult<()> {
         }
     }
     set_global_event_handler(&globals::GLOBALS);
+
+    register_action(actions::sample::SampleAction).await;
 
     run(env::args().collect()).await
 }
