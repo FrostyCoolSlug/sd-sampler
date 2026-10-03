@@ -30,6 +30,9 @@ async fn main() -> OpenActionResult<()> {
 
     register_action(actions::sample::SampleAction).await;
 
+    // Run the Ticker
+    tokio::spawn(ticker());
+
     run(env::args().collect()).await
 }
 
