@@ -9,7 +9,7 @@ use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
 use directories::BaseDirs;
-use log::warn;
+use log::{debug, warn};
 use openaction::InstanceId;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -209,8 +209,8 @@ impl Engine {
     }
 
     /// Stops playing back a sample (optional force stop)
-    fn stop(&self, key: &InstanceId, force: bool) {
-        if let Some(player) = self.playing.lock().unwrap().get(key) {
+    fn stop(&self, instance: &InstanceId, force: bool) {
+        if let Some(player) = self.playing.lock().unwrap().get(instance) {
             let currently_stopping = player.state.stopping.load(Ordering::Relaxed);
 
             player.state.stopping.store(true, Ordering::Relaxed);
@@ -222,8 +222,11 @@ impl Engine {
 
     /// Force stop all samples from playing
     fn stop_all(&self) {
-        for instance in self.playing.lock().unwrap().keys() {
-            self.stop(instance, true);
+        debug!("Stopping All Samples..");
+        let instances: Vec<InstanceId> = self.playing.lock().unwrap().keys().cloned().collect();
+        for instance in instances {
+            debug!("Triggering Stop for Instance: {}", instance);
+            self.stop(&instance, true);
         }
     }
 

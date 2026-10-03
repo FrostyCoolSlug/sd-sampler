@@ -90,7 +90,7 @@ impl GlobalEventHandler for Globals {
 
         let capture = settings.capture_device;
         let capture = (capture != DEFAULT_DEVICE).then_some(capture);
-        audio_engine.set_playback_device(capture);
+        audio_engine.set_recording_device(capture);
 
         Ok(())
     }
