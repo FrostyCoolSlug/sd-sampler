@@ -9,8 +9,14 @@
     </style>
 </head>
 <body>
-<sdpi-item label="Hello">
-    <span>World!</span>
+<sdpi-heading>Plugin</sdpi-heading>
+
+<sdpi-item label="Pre-buffer">
+    <sdpi-range global setting="pre_buffer_ms" min="0" max="30000" step="100" default="0" showlabels></sdpi-range>
+</sdpi-item>
+
+<sdpi-item label="Samples folder">
+    <sdpi-textfield global setting="samples_directory" placeholder="~/.local/share/opendeck-sampler/samples"></sdpi-textfield>
 </sdpi-item>
 
 <script>

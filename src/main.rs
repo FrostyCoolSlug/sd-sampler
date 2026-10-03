@@ -1,4 +1,9 @@
-use openaction::OpenActionResult;
+pub mod actions;
+pub mod globals;
+
+use std::env;
+use openaction::{run, OpenActionResult};
+use openaction::global_events::set_global_event_handler;
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
@@ -14,8 +19,7 @@ async fn main() -> OpenActionResult<()> {
             eprintln!("Logger initialisation Failed: {}", e);
         }
     }
+    set_global_event_handler(&globals::GLOBALS);
 
-    println!("Hello, world!");
-
-    Ok(())
+    run(env::args().collect()).await
 }
