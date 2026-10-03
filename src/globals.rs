@@ -3,10 +3,12 @@
 //! Honestly, there are only two of them, sample pre-buffer and sample location, and that second
 //! one is questionable :D
 
-use log::info;
+use directories::BaseDirs;
+use log::{debug, info};
 use openaction::global_events::{DidReceiveGlobalSettingsEvent, GlobalEventHandler};
-use openaction::{OpenActionResult, async_trait, get_global_settings};
+use openaction::{OpenActionResult, async_trait, get_global_settings, set_global_settings};
 use serde::{Deserialize, Serialize};
+use std::fs::create_dir_all;
 
 // There are gonna be a few of these, just helps prevent unneeded wrapping :p
 type Event = DidReceiveGlobalSettingsEvent;
@@ -32,6 +34,26 @@ impl GlobalEventHandler for Globals {
         let settings: GlobalSettings = serde_json::from_value(settings).unwrap_or_default();
 
         info!("Loaded Settings: {:#?}", settings);
+
+        let settings = if settings.samples_directory.is_empty() {
+            info!("Samples Directory not set, Setting Default");
+
+            let dir = BaseDirs::new().expect("Unable to Load Base Directories");
+            let data_dir = dir.data_dir();
+
+            let sample_path = data_dir.join("sd-sampler");
+            create_dir_all(&sample_path).expect("Failed to Create Directory");
+
+            let mut update = settings.clone();
+            update.samples_directory = sample_path.clone().into_string().expect("Failed");
+
+            debug!("Saving New Path: {:?}", sample_path);
+            set_global_settings(serde_json::to_value(&update)?).await?;
+
+            update
+        } else {
+            settings
+        };
 
         // Ok, we need to start or fetch the audio engine at this point
 

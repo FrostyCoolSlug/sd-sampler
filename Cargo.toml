@@ -20,5 +20,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+### Directory Handling ###
+directories = "6.0"
+
 ### Stream Deck ###
 openaction = "2.7.0"
