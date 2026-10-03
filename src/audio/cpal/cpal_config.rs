@@ -1,6 +1,5 @@
-use crate::globals::DEFAULT_DEVICE;
-use anyhow::{Result, anyhow, bail};
-use cpal::traits::{DeviceTrait, HostTrait};
+use anyhow::{Result, anyhow};
+use cpal::traits::HostTrait;
 use cpal::{Device, DeviceId, default_host};
 use std::str::FromStr;
 
@@ -10,11 +9,8 @@ impl CpalConfiguration {
     pub(crate) fn get_device(device: Option<String>, input: bool) -> Result<Device> {
         let host = default_host();
 
-        if let Some(device) = device
-            && device != DEFAULT_DEVICE
-        {
+        if let Some(device) = device {
             let id = DeviceId::from_str(&device)?;
-
             if let Some(device) = host.device_by_id(&id) {
                 return Ok(device);
             }
