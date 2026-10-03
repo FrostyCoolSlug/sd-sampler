@@ -1,16 +1,13 @@
-//! Ok, we need to fetch all the devices from pulseaudio, we can use pulsectl for this.
-//!
-//! I wanted to use cpal for this entire thing, but last time I tried pulseaudio wasn't properly
-//! supported, so only listed ALSA devices, and no nodes (such as virtual ones) created by Pulse.
-//! 
-//! This *MAY* have changed, but for now I'll stick with what I know.
+//! Ok, we need to fetch all the devices, use cpal for this..
 
 use anyhow::{Result, anyhow};
-use pulsectl::controllers::{DeviceControl, SinkController, SourceController};
-use pulsectl::controllers::types::DeviceInfo;
+use cpal::Device;
+use cpal::traits::{DeviceTrait, HostTrait};
+use log::debug;
 use serde_json::{Value, json};
 
-struct Device {
+#[derive(Debug)]
+struct DisplayDevice {
     name: String,
     label: String,
     is_monitor: bool,
@@ -25,12 +22,17 @@ pub fn sources() -> Value {
 
     let inputs: Vec<Value> = list.iter().filter(|d| !d.is_monitor).map(item).collect();
     let monitors: Vec<Value> = list.iter().filter(|d| d.is_monitor).map(item).collect();
-    json!([
-        { "value": "@DEFAULT_SOURCE@", "label": "System default input" },
-        { "value": "@DEFAULT_MONITOR@", "label": "System default output (what you hear)" },
-        { "label": "Inputs", "children": inputs },
-        { "label": "Output monitors", "children": monitors },
-    ])
+
+    let mut result = vec![
+        json!({ "value": "@DEFAULT_SOURCE@", "label": "System default input" }),
+        json!({ "label": "Inputs", "children": inputs }),
+    ];
+
+    if !monitors.is_empty() {
+        result.push(json!({ "label": "Output monitors", "children": monitors }));
+    }
+
+    json!(result)
 }
 
 /// Playback Sinks
@@ -47,38 +49,38 @@ pub fn sinks() -> Value {
     ])
 }
 
-fn sources_list() -> Result<Vec<Device>> {
-    let mut controller = SourceController::create().map_err(|e| anyhow!("{e:?}"))?;
-    let devices = controller.list_devices().map_err(|e| anyhow!("{e:?}"))?;
-
-    get_devices(devices)
-}
-
-fn sinks_list() -> Result<Vec<Device>> {
-    let mut controller = SinkController::create().map_err(|e| anyhow!("{e:?}"))?;
-    let devices = controller.list_devices().map_err(|e| anyhow!("{e:?}"))?;
-
-    get_devices(devices)
-}
-
-fn get_devices(devices: Vec<DeviceInfo>) -> Result<Vec<Device>>  {
-    Ok(devices
-        .into_iter()
-        .filter_map(|device| {
-            let name = device.name?;
-            let label = device.description.unwrap_or_else(|| name.clone());
-
-            let device = Device {
-                name,
-                label,
-                is_monitor: device.monitor.is_some(),
-            };
-
-            Some(device)
-        })
-        .collect())
-}
-
-fn item(d: &Device) -> Value {
+fn item(d: &DisplayDevice) -> Value {
     json!({ "value": d.name, "label": d.label })
+}
+
+fn sinks_list() -> Result<Vec<DisplayDevice>> {
+    let mut list: Vec<DisplayDevice> = vec![];
+
+    let host = cpal::default_host();
+    for device in host.output_devices()? {
+        list.push(get_device(device)?);
+    }
+    Ok(list)
+}
+
+fn sources_list() -> Result<Vec<DisplayDevice>> {
+    let mut list: Vec<DisplayDevice> = vec![];
+
+    let host = cpal::default_host();
+    for device in host.input_devices()? {
+        list.push(get_device(device)?);
+    }
+    Ok(list)
+}
+
+fn get_device(device: Device) -> Result<DisplayDevice> {
+    let name = device.id()?.to_string();
+    let label = device.description()?.name().to_string();
+    let is_monitor = name.clone().ends_with(".monitor");
+
+    Ok(DisplayDevice {
+        name,
+        label,
+        is_monitor,
+    })
 }

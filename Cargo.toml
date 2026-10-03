@@ -27,4 +27,4 @@ directories = "6.0"
 openaction = "2.7.0"
 
 ### PulseAudio Handlers
-pulsectl-rs = "0.3"
+cpal = { version = "0.18.2", features = ["pulseaudio"]}
