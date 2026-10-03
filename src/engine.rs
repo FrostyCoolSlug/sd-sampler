@@ -56,8 +56,8 @@ pub struct Engine {
     pre_buffer_ms: AtomicU32,
     samples_dir: RwLock<PathBuf>,
 
-    playback_device: Option<String>,
-    recording_device: Option<String>,
+    playback_device: RwLock<Option<String>>,
+    recording_device: RwLock<Option<String>>,
 
     sources: Mutex<HashMap<String, Source>>,
 
@@ -94,8 +94,8 @@ impl Engine {
         Self {
             pre_buffer_ms: AtomicU32::new(0),
             samples_dir: RwLock::new(default_samples_dir()),
-            playback_device: None,
-            recording_device: None,
+            playback_device: RwLock::new(None),
+            recording_device: RwLock::new(None),
 
             sources: Mutex::new(HashMap::new()),
             playing: Mutex::new(HashMap::new()),
@@ -110,17 +110,60 @@ impl Engine {
     /////////////////////////////////////////////////////////////////////
     // Configuration
     /////////////////////////////////////////////////////////////////////
-    
+
+    pub fn pre_buffer_ms(&self) -> u32 {
+        self.pre_buffer_ms.load(Ordering::Relaxed)
+    }
+
+    pub fn set_pre_buffer_ms(&self, ms: u32) {
+        if self.pre_buffer_ms.swap(ms, Ordering::Relaxed) == ms {
+            return;
+        }
+
+        // We need to teardown and Restart the Recording Thread
+    }
+
     /// Get the Samples Directory
     pub fn samples_dir(&self) -> PathBuf {
         self.samples_dir.read().unwrap().clone()
+    }
+
+    pub fn set_samples_dir(&self, dir: PathBuf) {
+        *self.samples_dir.write().unwrap() = dir;
+    }
+
+    pub fn playback_device(&self) -> Option<String> {
+        self.playback_device.read().unwrap().clone()
+    }
+
+    pub fn set_playback_device(&self, device: Option<String>) {
+        if *self.playback_device.read().unwrap() == device {
+            return;
+        }
+
+        // Ok, we need to stop all current playback, and update the device
+        self.stop_all();
+        *self.playback_device.write().unwrap() = device;
+    }
+
+    pub fn recording_device(&self) -> Option<String> {
+        self.playback_device.read().unwrap().clone()
+    }
+
+    pub fn set_recording_device(&self, device: Option<String>) {
+        if *self.recording_device.read().unwrap() == device {
+            return;
+        }
+
+        // TODO: Teardown and Recreate Recording Handler
+        *self.recording_device.write().unwrap() = device;
     }
 
     /////////////////////////////////////////////////////////////////////
     // Playback
     /////////////////////////////////////////////////////////////////////
 
-    /// Plays a Sample 
+    /// Plays a Sample
     pub fn play(&self, key: &InstanceId, mut audio: AudioFile, looping: bool) -> Result<()> {
         audio.file = self.samples_dir().join(&audio.file);
         if !audio.file.is_file() {
@@ -135,7 +178,7 @@ impl Engine {
             self.stop(key, true);
         }
 
-        let mut player = Player::new(audio, self.playback_device.clone())?;
+        let mut player = Player::new(audio, self.playback_device())?;
         let state = player.get_state();
 
         let error_slot = state.error.clone();
@@ -191,7 +234,7 @@ impl Engine {
     }
 
     /// Used for Cleaning Up anything that may have completed
-    pub fn cleanup(&mut self) {
+    pub fn cleanup(&self) {
         let mut map = self.playing.lock().unwrap();
         map.retain(|_, player| {
             if player.handle.is_finished() {

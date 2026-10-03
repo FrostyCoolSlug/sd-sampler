@@ -3,12 +3,14 @@
 //! Honestly, there are only two of them, sample pre-buffer and sample location, and that second
 //! one is questionable :D
 
+use crate::engine::engine;
 use directories::BaseDirs;
 use log::{debug, info};
 use openaction::global_events::{DidReceiveGlobalSettingsEvent, GlobalEventHandler};
 use openaction::{OpenActionResult, async_trait, get_global_settings, set_global_settings};
 use serde::{Deserialize, Serialize};
 use std::fs::create_dir_all;
+use std::path::PathBuf;
 
 // There are gonna be a few of these, just helps prevent unneeded wrapping :p
 type Event = DidReceiveGlobalSettingsEvent;
@@ -35,8 +37,6 @@ impl Default for GlobalSettings {
         }
     }
 }
-
-
 
 pub struct Globals;
 pub static GLOBALS: Globals = Globals;
@@ -74,10 +74,23 @@ impl GlobalEventHandler for Globals {
         };
 
         // Ok, we need to start or fetch the audio engine at this point
+        let audio_engine = engine();
 
         // Then set the Sample Path
+        let sample_path = PathBuf::from(settings.samples_directory);
+        if sample_path.exists() {
+            audio_engine.set_samples_dir(sample_path);
+        }
 
-        // Then set the prebuffer
+        audio_engine.set_pre_buffer_ms(settings.pre_buffer_ms);
+
+        let playback = settings.playback_device;
+        let playback = (playback != DEFAULT_DEVICE).then_some(playback);
+        audio_engine.set_playback_device(playback);
+
+        let capture = settings.capture_device;
+        let capture = (capture != DEFAULT_DEVICE).then_some(capture);
+        audio_engine.set_playback_device(capture);
 
         Ok(())
     }

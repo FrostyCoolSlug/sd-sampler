@@ -1,12 +1,16 @@
 pub mod actions;
-pub mod globals;
-pub mod devices;
 pub mod audio;
+pub mod devices;
 mod engine;
+pub mod globals;
 
-use std::env;
-use openaction::{run, OpenActionResult, register_action};
 use openaction::global_events::set_global_event_handler;
+use openaction::{OpenActionResult, register_action, run};
+use std::env;
+use std::time::Duration;
+use tokio::select;
+use tokio::time::interval;
+use crate::engine::engine;
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
@@ -27,4 +31,23 @@ async fn main() -> OpenActionResult<()> {
     register_action(actions::sample::SampleAction).await;
 
     run(env::args().collect()).await
+}
+
+pub async fn ticker() {
+    // Timers to Tick
+    let mut blink_tick = interval(Duration::from_millis(250));
+    let mut clean_tick = interval(Duration::from_millis(20));
+
+    // Whether a blinking button is currently on or off
+    let mut blink = false;
+    loop {
+        select! {
+            _ = blink_tick.tick() => {
+                blink = !blink
+            }
+            _ = clean_tick.tick() => {
+                engine().cleanup()
+            }
+        }
+    }
 }

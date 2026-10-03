@@ -4,6 +4,7 @@ use anyhow::{Result};
 use cpal::Device;
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde_json::{Value, json};
+use crate::globals::DEFAULT_DEVICE;
 
 #[derive(Debug)]
 struct DisplayDevice {
@@ -23,7 +24,7 @@ pub fn sources() -> Value {
     let monitors: Vec<Value> = list.iter().filter(|d| d.is_monitor).map(item).collect();
 
     let mut result = vec![
-        json!({ "value": "@DEFAULT_DEVICE@", "label": "System default input" }),
+        json!({ "value": DEFAULT_DEVICE, "label": "System default input" }),
         json!({ "label": "Inputs", "children": inputs }),
     ];
 
@@ -43,7 +44,7 @@ pub fn sinks() -> Value {
 
     let outputs: Vec<Value> = list.iter().map(item).collect();
     json!([
-        { "value": "@DEFAULT_DEVICE@", "label": "System default output" },
+        { "value": DEFAULT_DEVICE, "label": "System default output" },
         { "label": "Outputs", "children": outputs },
     ])
 }
