@@ -1,5 +1,6 @@
 //! This is lifted pretty much verbatim from the GoXLR Utility... If it ain't broke...
 
+use crate::audio::AudioFile;
 use crate::audio::backend::{AudioSpecification, get_output};
 use anyhow::bail;
 use anyhow::{Result, anyhow};
@@ -44,23 +45,16 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(
-        file: &PathBuf,
-        device: Option<String>,
-        fade_duration: Option<u32>,
-        start_pct: Option<f64>,
-        stop_pct: Option<f64>,
-        gain: Option<f64>,
-    ) -> Result<Self> {
-        let probe_result = Player::load_file(file);
+    pub fn new(audio: AudioFile, device: Option<String>) -> Result<Self> {
+        let probe_result = Player::load_file(&audio.file);
         if probe_result.is_err() {
             return Err(anyhow!("Unable to Probe Audio File"));
         }
 
         Ok(Self {
-            file: file.clone(),
+            file: audio.file.clone(),
 
-            probe: probe_result.unwrap(),
+            probe: probe_result?,
             volume: 1.0_f32,
             stopping: Arc::new(AtomicBool::new(false)),
             force_stop: Arc::new(AtomicBool::new(false)),
@@ -70,10 +64,10 @@ impl Player {
             error: Arc::new(Mutex::new(None)),
 
             device,
-            fade_duration,
-            start_pct,
-            stop_pct,
-            gain,
+            fade_duration: audio.fade_on_stop,
+            start_pct: audio.start_pct,
+            stop_pct: audio.stop_pct,
+            gain: audio.gain,
 
             process_only: false,
             normalized_gain: Arc::new(AtomicF64::new(1.0)),
