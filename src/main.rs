@@ -4,24 +4,28 @@ pub mod devices;
 mod engine;
 pub mod globals;
 
+use crate::engine::engine;
 use openaction::global_events::set_global_event_handler;
 use openaction::{OpenActionResult, register_action, run};
 use std::env;
 use std::time::Duration;
 use tokio::select;
 use tokio::time::interval;
-use crate::engine::engine;
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
     {
         use simplelog::*;
         let level = LevelFilter::Debug;
-        let config = Config::default();
         let mode = TerminalMode::Stdout;
         let colour = ColorChoice::Auto;
 
-        let logger = TermLogger::init(level, config, mode, colour);
+        // We need to ignore a couple of packages log output so create a builder.
+        let mut config = ConfigBuilder::new();
+        config.add_filter_ignore_str("pulseaudio");
+        config.add_filter_ignore_str("symphonia");
+
+        let logger = TermLogger::init(level, config.build(), mode, colour);
         if let Err(e) = logger {
             eprintln!("Logger initialisation Failed: {}", e);
         }
