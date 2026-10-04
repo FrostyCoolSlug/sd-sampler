@@ -39,7 +39,7 @@ impl OpenInputStream for CpalRecord {
 
         // Input
         let config = cpal::StreamConfig {
-            channels: spec.channels,
+            channels: spec.channels as u16,
             sample_rate: spec.rate,
 
             // Set the main read buffer at 10ms

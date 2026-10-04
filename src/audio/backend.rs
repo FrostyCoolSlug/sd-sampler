@@ -6,7 +6,7 @@ pub struct AudioSpecification {
     pub device: Option<String>,
 
     pub rate: u32,
-    pub channels: u16,
+    pub channels: usize,
 
     /// Packet size in frames (used to size the playback buffer).
     pub buffer: usize,

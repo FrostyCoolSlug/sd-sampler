@@ -252,7 +252,7 @@ impl Player {
                     // Is this the first decoded packet?
                     if audio_output.is_none() && sample_buffer.is_none() {
                         let spec = *decoded.spec();
-                        let mut out_channels = spec.channels.count() as u16;
+                        let mut out_channels = spec.channels.count();
 
                         // This is a mono audio file, we need to replace the spec with a Stereo
                         // spec, then during processing, duplicate and interlace the samples.
