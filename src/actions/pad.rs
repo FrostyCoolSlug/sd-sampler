@@ -1,9 +1,9 @@
 //! Action code for the Sample / Test Action
-
 use crate::actions::alert_on_error;
 use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
+use anyhow::Result;
 use anyhow::{anyhow, bail};
 use chrono::Local;
 use log::{debug, warn};
@@ -22,6 +22,30 @@ const FADE_OUT_MILLIS: u32 = 500;
 // this in the settings (would break on restart), but we also want to make sure that the gain
 // calculation process doesn't run twice simultaneously.
 static ADDING: LazyLock<Mutex<HashSet<InstanceId>>> = LazyLock::new(Default::default);
+
+// This allows us to pull the 'current' settings for an instance at any point, because certain
+// tasks may thread off, there's an opportunity for settings to change whilst that's happening;
+// this store makes sure those threads can get the 'current' settings when they complete.
+type SettingsLock = LazyLock<Mutex<HashMap<InstanceId, PadActionSettings>>>;
+static SETTINGS: SettingsLock = LazyLock::new(Default::default);
+
+fn remember(instance_id: &InstanceId, settings: &PadActionSettings) {
+    let id = instance_id.clone();
+    SETTINGS.lock().unwrap().insert(id, settings.clone());
+}
+
+fn recall(instance_id: &InstanceId) -> Option<PadActionSettings> {
+    SETTINGS.lock().unwrap().get(instance_id).cloned()
+}
+
+fn forget(instance_id: &InstanceId) {
+    SETTINGS.lock().unwrap().remove(instance_id);
+}
+
+async fn save(i: &Instance, settings: &PadActionSettings) -> OpenActionResult<()> {
+    remember(&i.instance_id, settings);
+    i.set_settings(settings).await
+}
 
 #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PlaybackMode {
@@ -129,6 +153,11 @@ impl Action for PadAction {
         self.did_receive_settings(i, s).await
     }
 
+    async fn will_disappear(&self, i: &Instance, _s: &Self::Settings) -> OpenActionResult<()> {
+        forget(&i.instance_id);
+        Ok(())
+    }
+
     async fn key_down(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
         let id = i.instance_id.clone();
         let local_engine = engine();
@@ -157,7 +186,7 @@ impl Action for PadAction {
                                 cursor: cursor + 1,
                                 ..s.clone()
                             };
-                            let _ = i.set_settings(&settings);
+                            let _ = save(&i, &settings).await?;
 
                             &s.tracks[cursor]
                         }
@@ -191,7 +220,7 @@ impl Action for PadAction {
             let mut cleared = s.clone();
             cleared.tracks.clear();
 
-            return i.set_settings(&cleared).await;
+            return save(&i, &cleared).await;
         }
 
         match self.get_release(&id, s) {
@@ -204,7 +233,7 @@ impl Action for PadAction {
                         let mut updated = s.clone();
                         updated.tracks.push(track);
 
-                        i.set_settings(&updated).await?;
+                        save(&i, &updated).await?;
                     }
                     Some(None) => i.show_alert().await?,
                     None => {}
@@ -220,20 +249,25 @@ impl Action for PadAction {
     }
 
     async fn did_receive_settings(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
-        let file = s.add_file.trim().to_string();
+        remember(&i.instance_id, s);
+
         let id = i.instance_id.clone();
+        let file = s.add_file.trim().to_string();
 
         if file.is_empty() || !ADDING.lock().unwrap().insert(id.clone()) {
             return Ok(());
         }
 
-        let mut settings = s.clone();
         tokio::spawn(async move {
             let sample = engine().samples_dir().join(file.clone());
             let gain = blocking(move || normalised_gain(sample)).await;
             ADDING.lock().unwrap().remove(&id);
 
-            let Some(instance) = get_instance(id).await else {
+            let Some(instance) = get_instance(id.clone()).await else {
+                return;
+            };
+
+            let Some(mut settings) = recall(&id) else {
                 return;
             };
 
@@ -245,9 +279,7 @@ impl Action for PadAction {
                     let _ = instance.show_alert().await;
                 }
             }
-
-            debug!("New Settings: {settings:#?}");
-            let _ = instance.set_settings(&settings).await;
+            let _ = save(&instance, &settings).await;
         });
         Ok(())
     }
