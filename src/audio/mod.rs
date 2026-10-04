@@ -9,6 +9,7 @@ pub mod recorder;
 pub mod ringbuffer;
 
 mod cpal;
+pub mod processors;
 
 #[derive(Debug, Clone)]
 pub struct AudioFile {

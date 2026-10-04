@@ -8,6 +8,7 @@ use crate::audio::recorder::{BufferedRecorder, RecorderState};
 use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
+use crate::audio::processors::peaks::compute_peaks;
 use crate::globals::{DEFAULT_DEVICE, GlobalSettings};
 use directories::BaseDirs;
 use log::{debug, error, info, warn};
@@ -18,7 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -59,7 +60,7 @@ pub struct Recorded {
 #[derive(Default)]
 // A cache of the sample peaks used for trimming
 struct PeakCache {
-    done: HashMap<String, Vec<f32>>,
+    done: HashMap<String, Vec<f64>>,
     pending: HashSet<String>,
 }
 
@@ -267,6 +268,43 @@ impl Engine {
         PlaybackState::None
     }
 
+    pub fn elapsed(&self, key: &InstanceId) -> Option<f64> {
+        let map = self.playing.lock().unwrap();
+        if let Some(play) = map.get(key) {
+            if play.handle.is_finished() {
+                return None;
+            }
+            return Some(play.state.progress.load(Ordering::Relaxed) as f64 / 100.0);
+        }
+        None
+    }
+
+    pub fn waveform(&self, file: &str) -> Option<Vec<f64>> {
+        {
+            let mut cache = self.peaks.lock().unwrap();
+            if let Some(p) = cache.done.get(file) {
+                return if p.is_empty() { None } else { Some(p.clone()) };
+            }
+            if !cache.pending.insert(file.to_string()) {
+                return None;
+            }
+        }
+
+        // If we get here, this hasn't been cached yet, generate the waveform
+        let path = self.samples_dir().join(file);
+        let (cache, name) = (self.peaks.clone(), file.to_string());
+        thread::spawn(move || {
+            let result = compute_peaks(&path, 40);
+            if let Err(e) = &result {
+                warn!("Unable to compute the waveform for {name}: {e}");
+            }
+            let mut cache = cache.lock().unwrap();
+            cache.pending.remove(&name);
+            cache.done.insert(name, result.unwrap_or_default());
+        });
+        None
+    }
+
     /////////////////////////////////////////////////////////////////////
     // Recording Background
     /////////////////////////////////////////////////////////////////////
@@ -385,6 +423,14 @@ impl Engine {
 
     pub fn is_recording(&self, instance: &InstanceId) -> bool {
         self.recording.lock().unwrap().contains_key(instance)
+    }
+
+    pub fn recording_elapsed(&self, instance: &InstanceId) -> Option<Duration> {
+        if let Some(recording) = self.recording.lock().unwrap().get(instance) {
+            return Some(Instant::now().duration_since(recording.started));
+        }
+
+        None
     }
 
     /// Force stop all samples from playing
