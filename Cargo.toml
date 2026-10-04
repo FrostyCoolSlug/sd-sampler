@@ -30,8 +30,11 @@ openaction = "2.7.0"
 cpal = { version = "0.18.2", features = ["pulseaudio"]}
 
 ### Utility Crates
-chrono = { version = "0.4.42", default-features = false, features = ["clock"] } 
+chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
 fastrand = "2.5.0"
+walkdir = "2"
+rfd = "0.17.2"
+open = "5.4.4"
 
 ### Audio File Handling
 hound = "3.5"

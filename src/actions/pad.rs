@@ -4,9 +4,9 @@ use crate::actions::alert_on_error;
 use crate::audio::AudioFile;
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use chrono::Local;
-use openaction::{Action, Instance, InstanceId, OpenActionResult, async_trait};
+use openaction::{async_trait, set_global_settings, Action, Instance, InstanceId, OpenActionResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::cmp::PartialEq;
@@ -267,9 +267,43 @@ async fn datasource(event: &str) -> Option<Value> {
     let items = match event {
         "getSources" => blocking(|| Ok(sources())).await,
         "getSinks" => blocking(|| Ok(sinks())).await,
+        "getSamples" => {
+            blocking(|| {
+                let files = engine().samples();
+                let map = |f| json!({"value": f, "label": f});
+                Ok(Value::Array(files.into_iter().map(map).collect()))
+            })
+            .await
+        }
+        "selectSampleDir" => {
+            let file_dialog = rfd::FileDialog::new();
+            if let Some(dir) = file_dialog.pick_folder() {
+                let dir = dir.to_string_lossy().to_string();
+
+                let mut settings = engine().to_global_settings();
+                settings.samples_directory = dir;
+
+                let _ = set_global_settings(settings).await;
+            }
+            return None
+        }
+        "openSampleDir" => {
+            let _ = open::that_detached(engine().samples_dir());
+            return None
+        }
         _ => return None,
     };
     items.ok()
+}
+
+/// Audio files in the samples directory.
+pub fn samples(files: Vec<String>) -> Value {
+    Value::Array(
+        files
+            .into_iter()
+            .map(|f| json!({ "value": f, "label": f }))
+            .collect(),
+    )
 }
 
 async fn blocking<T: Send + 'static>(

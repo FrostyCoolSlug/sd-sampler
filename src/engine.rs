@@ -18,6 +18,8 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
+use walkdir::WalkDir;
+use crate::globals::{GlobalSettings, DEFAULT_DEVICE};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum PlaybackState {
@@ -404,6 +406,40 @@ impl Engine {
     pub(crate) fn set_clear_armed(&self, armed: bool) {
         self.clear_armed.store(armed, Ordering::Relaxed)
     }
+
+    pub(crate) fn to_global_settings(&self) -> GlobalSettings {
+        GlobalSettings {
+            pre_buffer_ms: self.pre_buffer_ms(),
+            samples_directory: self.samples_dir().to_string_lossy().to_string(),
+            capture_device: self.recording_device().unwrap_or(DEFAULT_DEVICE.into()),
+            playback_device: self.playback_device().unwrap_or(DEFAULT_DEVICE.into()),
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////
+    // Samples
+    /////////////////////////////////////////////////////////////////////
+    pub fn samples(&self) -> Vec<String> {
+        let dir = self.samples_dir();
+
+        let mut out: Vec<String> = WalkDir::new(&dir)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .filter(|e| {
+                matches!(
+                    e.path().extension().and_then(|x| x.to_str()).map(|x| x.to_ascii_lowercase()).as_deref(),
+                    Some("wav") | Some("ogg") | Some("flac") | Some("mp3")
+                )
+            })
+            .filter_map(|e| e.path().strip_prefix(&dir).ok().map(|p| p.to_string_lossy().into_owned()))
+            .collect();
+
+        out.sort();
+        out
+    }
+
 
     ////
     /// Used for Cleaning Up anything that may have completed
