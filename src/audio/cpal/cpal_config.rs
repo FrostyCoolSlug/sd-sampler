@@ -8,14 +8,11 @@ pub struct CpalConfiguration {}
 
 impl CpalConfiguration {
     pub(crate) fn get_device(device: Option<String>, input: bool) -> Result<Device> {
-        debug!("Attempting to Locate: {:?}", device);
-
         let host = default_host();
 
         if let Some(device) = device {
             let id = DeviceId::from_str(&device)?;
             if let Some(device) = host.device_by_id(&id) {
-                debug!("Found Device: {:#?}", device);
                 return Ok(device);
             }
         }
