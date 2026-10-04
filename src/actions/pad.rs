@@ -1,17 +1,27 @@
 //! Action code for the Sample / Test Action
 
 use crate::actions::alert_on_error;
-use crate::audio::AudioFile;
+use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
 use anyhow::{anyhow, bail};
 use chrono::Local;
-use openaction::{async_trait, set_global_settings, Action, Instance, InstanceId, OpenActionResult};
+use log::{debug, warn};
+use openaction::{
+    Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::cmp::PartialEq;
+use std::collections::{HashMap, HashSet};
+use std::sync::{LazyLock, Mutex};
 
 const FADE_OUT_MILLIS: u32 = 500;
+
+// This is a cache of pads whose "add file" request is being processed, we don't want to store
+// this in the settings (would break on restart), but we also want to make sure that the gain
+// calculation process doesn't run twice simultaneously.
+static ADDING: LazyLock<Mutex<HashSet<InstanceId>>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PlaybackMode {
@@ -96,7 +106,7 @@ pub enum ReleaseAction {
 
 pub struct PadAction;
 
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PadActionSettings {
     pub name: String,
 
@@ -105,12 +115,19 @@ pub struct PadActionSettings {
 
     pub tracks: Vec<Track>,
     pub cursor: usize,
+
+    // A File Being Added
+    pub add_file: String,
 }
 
 #[async_trait]
 impl Action for PadAction {
     const UUID: &'static str = "com.frostycoolslug.sd-sampler.pad";
     type Settings = PadActionSettings;
+
+    async fn will_appear(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
+        self.did_receive_settings(i, s).await
+    }
 
     async fn key_down(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
         let id = i.instance_id.clone();
@@ -125,8 +142,7 @@ impl Action for PadAction {
             PressAction::Record => {
                 let id = i.instance_id.clone();
                 let name = format!("Recording_{}.wav", Local::now().format("%Y-%m-%dT%H%M%S"));
-
-                let result = blocking(move || engine().record(&id, name.into())).await;
+                let result = engine().record(&id, name.into());
                 alert_on_error(i, result).await?;
             }
             PressAction::Play { looping, fade } => {
@@ -200,6 +216,39 @@ impl Action for PadAction {
             ReleaseAction::Nothing => {}
         }
 
+        Ok(())
+    }
+
+    async fn did_receive_settings(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
+        let file = s.add_file.trim().to_string();
+        let id = i.instance_id.clone();
+
+        if file.is_empty() || !ADDING.lock().unwrap().insert(id.clone()) {
+            return Ok(());
+        }
+
+        let mut settings = s.clone();
+        tokio::spawn(async move {
+            let sample = engine().samples_dir().join(file.clone());
+            let gain = blocking(move || normalised_gain(sample)).await;
+            ADDING.lock().unwrap().remove(&id);
+
+            let Some(instance) = get_instance(id).await else {
+                return;
+            };
+
+            settings.add_file.clear();
+            match gain {
+                Ok(gain) => settings.tracks.push(Track::new(file, gain)),
+                Err(e) => {
+                    warn!("Failed to Add {file}: {e:#}");
+                    let _ = instance.show_alert().await;
+                }
+            }
+
+            debug!("New Settings: {settings:#?}");
+            let _ = instance.set_settings(&settings).await;
+        });
         Ok(())
     }
 
@@ -285,11 +334,11 @@ async fn datasource(event: &str) -> Option<Value> {
 
                 let _ = set_global_settings(settings).await;
             }
-            return None
+            return None;
         }
         "openSampleDir" => {
             let _ = open::that_detached(engine().samples_dir());
-            return None
+            return None;
         }
         _ => return None,
     };
