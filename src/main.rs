@@ -3,6 +3,7 @@ pub mod audio;
 pub mod devices;
 mod engine;
 pub mod globals;
+pub mod svg;
 
 use crate::engine::engine;
 use openaction::global_events::set_global_event_handler;
@@ -11,6 +12,7 @@ use std::env;
 use std::time::Duration;
 use tokio::select;
 use tokio::time::interval;
+use crate::actions::pad::draw_all_pads;
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
@@ -18,7 +20,7 @@ async fn main() -> OpenActionResult<()> {
         use simplelog::*;
         let level = LevelFilter::Debug;
         let mode = TerminalMode::Stdout;
-        let colour = ColorChoice::Auto;
+        let colour = ColorChoice::Never;
 
         // We need to ignore a couple of packages log output so create a builder.
         let mut config = ConfigBuilder::new();
@@ -50,7 +52,8 @@ pub async fn ticker() {
     loop {
         select! {
             _ = blink_tick.tick() => {
-                blink = !blink
+                blink = !blink;
+                draw_all_pads(blink).await;
             }
             _ = clean_tick.tick() => {
                 engine().cleanup()

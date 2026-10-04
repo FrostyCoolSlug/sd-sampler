@@ -3,9 +3,10 @@ use crate::actions::alert_on_error;
 use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
+use crate::svg::{PadState, PadView};
 use anyhow::anyhow;
 use chrono::Local;
-use log::warn;
+use log::{debug, warn};
 use openaction::{
     Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
 };
@@ -14,6 +15,7 @@ use serde_json::{Value, json};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
+use crate::svg;
 
 const FADE_OUT_MILLIS: u32 = 500;
 
@@ -137,6 +139,8 @@ pub struct PadActionSettings {
     pub order: PlayOrder,
 
     pub tracks: Vec<Track>,
+
+    #[serde(default)]
     pub cursor: usize,
 
     // A File Being Added
@@ -149,7 +153,8 @@ impl Action for PadAction {
     type Settings = PadActionSettings;
 
     async fn will_appear(&self, i: &Instance, s: &Self::Settings) -> OpenActionResult<()> {
-        self.did_receive_settings(i, s).await
+        self.did_receive_settings(i, s).await?;
+        draw_pad(i, s, false).await
     }
 
     async fn will_disappear(&self, i: &Instance, _s: &Self::Settings) -> OpenActionResult<()> {
@@ -386,10 +391,78 @@ pub fn samples(files: Vec<String>) -> Value {
     )
 }
 
+/// A Function to push blocking tasks off our current thread
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
 ) -> anyhow::Result<T> {
     tokio::task::spawn_blocking(f)
         .await
         .map_err(|e| anyhow!("{e}"))?
+}
+
+/// A function which updates the display icon on pads
+pub async fn draw_all_pads(blink: bool) {
+    // We can use Settings to grab the currently visible pads
+    let pads: Vec<InstanceId> = SETTINGS.lock().unwrap().keys().cloned().collect();
+    for instance_id in pads {
+        let Some(instance) = get_instance(instance_id.clone()).await else {
+            continue;
+        };
+        let Some(settings) = recall(&instance_id) else {
+            continue;
+        };
+
+        // If we can't draw a pad, we can just fail quietly
+        let _ = draw_pad(&instance, &settings, blink).await;
+    }
+}
+
+async fn draw_pad(instance: &Instance, s: &PadActionSettings, blink: bool) -> OpenActionResult<()> {
+    // We need to generate our SVG from our state and settings.. First, state.
+    let id = &instance.instance_id;
+
+    let engine_local = engine();
+    let recording = engine_local.recording_elapsed(id);
+    let playing = engine_local.elapsed(id);
+
+    let state = if recording.is_some() {
+        PadState::Recording
+    } else if playing.is_some() {
+        PadState::Playing
+    } else if s.tracks.is_empty() {
+        PadState::Empty
+    } else if engine_local.clear_armed() {
+        PadState::ClearArmed
+    } else {
+        PadState::Idle
+    };
+
+    // For the waveform, we show either the active file, or the first file.
+    let base = engine_local.samples_dir();
+    let current = engine_local.active_playback_file(&id);
+    let shown = current
+        .as_ref()
+        .and_then(|p| s.tracks.iter().find(|t| base.join(t.file.clone()) == *p))
+        .or_else(|| s.tracks.first());
+
+    let (trim, wave) = match shown {
+        Some(t) => ((t.start, t.end), engine_local.waveform(&t.file)),
+        None => ((0.0, 100.0), None),
+    };
+
+    let view = PadView {
+        state,
+        name: s.name.clone(),
+        badge: s.function.badge().to_string(),
+        count: s.tracks.len(),
+        wave,
+        trim,
+        progress: engine_local.elapsed(&id),
+        secs: recording.map(|d| d.as_secs_f64()).unwrap_or(0.0),
+        blink,
+    };
+
+    // Grab the SVG Data
+    let svg = svg::data_url(&svg::pad(&view));
+    instance.set_image(Some(svg), None).await
 }
