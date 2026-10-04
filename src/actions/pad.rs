@@ -3,10 +3,9 @@ use crate::actions::alert_on_error;
 use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
-use anyhow::Result;
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use chrono::Local;
-use log::{debug, warn};
+use log::warn;
 use openaction::{
     Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
 };
@@ -186,7 +185,7 @@ impl Action for PadAction {
                                 cursor: cursor + 1,
                                 ..s.clone()
                             };
-                            let _ = save(&i, &settings).await?;
+                            let _ = save(i, &settings).await?;
 
                             &s.tracks[cursor]
                         }
@@ -220,7 +219,7 @@ impl Action for PadAction {
             let mut cleared = s.clone();
             cleared.tracks.clear();
 
-            return save(&i, &cleared).await;
+            return save(i, &cleared).await;
         }
 
         match self.get_release(&id, s) {
@@ -233,7 +232,7 @@ impl Action for PadAction {
                         let mut updated = s.clone();
                         updated.tracks.push(track);
 
-                        save(&i, &updated).await?;
+                        save(i, &updated).await?;
                     }
                     Some(None) => i.show_alert().await?,
                     None => {}

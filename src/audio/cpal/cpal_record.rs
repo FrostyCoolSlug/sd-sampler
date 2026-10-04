@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use cpal::ChannelCount;
 use cpal::traits::{DeviceTrait, StreamTrait};
 use log::warn;
 use rb::{Consumer, RB, RbConsumer, RbProducer, SpscRb};

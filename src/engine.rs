@@ -8,6 +8,7 @@ use crate::audio::recorder::{BufferedRecorder, RecorderState};
 use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
+use crate::globals::{DEFAULT_DEVICE, GlobalSettings};
 use directories::BaseDirs;
 use log::{debug, error, info, warn};
 use openaction::InstanceId;
@@ -19,7 +20,6 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
 use walkdir::WalkDir;
-use crate::globals::{GlobalSettings, DEFAULT_DEVICE};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum PlaybackState {
@@ -78,7 +78,7 @@ pub struct Engine {
     /// Actively Recording Monitor
     recording: Mutex<HashMap<InstanceId, ActiveRecording>>,
 
-    cursors: Mutex<HashMap<InstanceId, usize>>,
+    /// Cache of Peak Generations
     peaks: Arc<Mutex<PeakCache>>,
 
     /// Whether the 'Clear' action is active
@@ -112,7 +112,6 @@ impl Engine {
 
             playing: Mutex::new(HashMap::new()),
             recording: Mutex::new(HashMap::new()),
-            cursors: Mutex::new(HashMap::new()),
             peaks: Arc::new(Mutex::new(PeakCache::default())),
             clear_armed: AtomicBool::new(false),
             last_pressed: Mutex::new(None),
@@ -392,7 +391,7 @@ impl Engine {
     fn stop_all_recordings(&self) {
         let instances: Vec<InstanceId> = self.recording.lock().unwrap().keys().cloned().collect();
         for instance in instances {
-            self.stop_recording(&instance);
+            let _ = self.stop_recording(&instance);
         }
     }
 
@@ -429,17 +428,25 @@ impl Engine {
             .filter(|e| e.file_type().is_file())
             .filter(|e| {
                 matches!(
-                    e.path().extension().and_then(|x| x.to_str()).map(|x| x.to_ascii_lowercase()).as_deref(),
+                    e.path()
+                        .extension()
+                        .and_then(|x| x.to_str())
+                        .map(|x| x.to_ascii_lowercase())
+                        .as_deref(),
                     Some("wav") | Some("ogg") | Some("flac") | Some("mp3")
                 )
             })
-            .filter_map(|e| e.path().strip_prefix(&dir).ok().map(|p| p.to_string_lossy().into_owned()))
+            .filter_map(|e| {
+                e.path()
+                    .strip_prefix(&dir)
+                    .ok()
+                    .map(|p| p.to_string_lossy().into_owned())
+            })
             .collect();
 
         out.sort();
         out
     }
-
 
     ////
     /// Used for Cleaning Up anything that may have completed
@@ -467,10 +474,10 @@ impl Engine {
             true
         });
 
-        if let Some(check) = &*self.background_record.lock().unwrap() {
-            if check.handle.is_finished() {
-                warn!("Background Recorder Stopped Unexpectedly!");
-            }
+        if let Some(check) = &*self.background_record.lock().unwrap()
+            && check.handle.is_finished()
+        {
+            warn!("Background Recorder Stopped Unexpectedly!");
         }
     }
 }

@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use cpal::traits::HostTrait;
 use cpal::{Device, DeviceId, default_host};
 use std::str::FromStr;
-use log::{debug, info};
+use log::{info};
 
 pub struct CpalConfiguration {}
 

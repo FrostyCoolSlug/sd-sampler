@@ -1,5 +1,4 @@
 use std::cmp::max;
-use std::collections::VecDeque;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::BufWriter;

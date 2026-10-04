@@ -8,6 +8,7 @@ use atomic_float::AtomicF64;
 use ebur128::{EbuR128, Mode};
 use log::debug;
 use std::fs::File;
+use std::io;
 use std::io::ErrorKind::UnexpectedEof;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -336,13 +337,10 @@ impl Player {
                         }
 
                         // Flush the samples to the Audio Stream..
-                        if let Some(audio_output) = &mut audio_output {
-                            if let Err(e) = audio_output.write(&samples) {
-                                break 'main Err(Error::IoError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    e.to_string(),
-                                )));
-                            }
+                        if let Some(audio_output) = &mut audio_output
+                            && let Err(e) = audio_output.write(&samples)
+                        {
+                            break 'main Err(Error::IoError(io::Error::other(e.to_string())));
                         }
 
                         samples_processed += samples.len() as u64;
@@ -440,10 +438,10 @@ impl Player {
         // We're going to suppress that error here, with the assumption that if it's reached, the
         // file has ended, and playback is complete. It's not ideal, but we'll work with it.
         if let Err(error) = result {
-            if let Error::IoError(ref io_error) = error {
-                if io_error.kind() == UnexpectedEof {
-                    return Ok(());
-                }
+            if let Error::IoError(ref io_error) = error
+                && io_error.kind() == UnexpectedEof
+            {
+                return Ok(());
             }
 
             // Otherwise, throw this error up.
