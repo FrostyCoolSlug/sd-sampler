@@ -42,7 +42,5 @@ hound = "3.5"
 ebur128 = "0.1"
 rb = "0.4"
 atomic_float = "1"
-
-# I really need to upgrade these, but keeping them here means I can copypasta from the GoXLR Utility :)
-rubato = "0.16.1"
+rubato = "5.0"
 symphonia = { version = "0.6", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3", "all-meta"] }

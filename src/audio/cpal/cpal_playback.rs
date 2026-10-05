@@ -5,7 +5,8 @@ use cpal::Stream;
 use cpal::traits::{DeviceTrait, StreamTrait};
 use log::{debug, warn};
 use rb::{Producer, RB, RbConsumer, RbInspector, RbProducer, SpscRb};
-use rubato::{FftFixedIn, Resampler};
+use rubato::audioadapter_buffers::direct::SequentialSliceOfVecs;
+use rubato::{Fft, FixedSync, Resampler};
 use std::panic::catch_unwind;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,7 +28,7 @@ pub(crate) struct CpalPlayback {
 }
 
 struct CpalResampler {
-    resampler: FftFixedIn<f32>,
+    resampler: Fft<f32>,
     input_buffer: Vec<f32>,
     input: Vec<Vec<f32>>,
     output: Vec<Vec<f32>>,
@@ -102,12 +103,12 @@ impl OpenOutputStream for CpalPlayback {
             );
 
             // Create a resampler..
-            let resampler = FftFixedIn::<f32>::new(
+            let resampler = Fft::<f32>::new(
                 spec.rate as usize,
                 config.sample_rate as usize,
                 spec.buffer,
-                2,
                 spec.channels,
+                FixedSync::Input,
             )?;
 
             // Create a buffer to hold samples until we can resample..
@@ -115,7 +116,7 @@ impl OpenOutputStream for CpalPlayback {
 
             // Allocate the Input and Output Buffers..
             let input = vec![vec![0_f32; spec.buffer]; spec.channels];
-            let output = Resampler::output_buffer_allocate(&resampler, true);
+            let output = vec![vec![0_f32; resampler.output_frames_max()]; spec.channels];
 
             Some(CpalResampler {
                 resampler,
@@ -173,11 +174,20 @@ impl AudioOutput for CpalPlayback {
                 .collect();
 
             // Attempt to perform the resample
-            let result = resampler.resampler.process_into_buffer(
-                &resampler.input,
-                &mut resampler.output,
-                None,
-            );
+            let channels = resampler.input.len();
+            let frames_in = resampler.resampler.input_frames_next();
+            let frames_out = resampler.output[0].len();
+
+            let result = match (
+                SequentialSliceOfVecs::new(&resampler.input, channels, frames_in),
+                SequentialSliceOfVecs::new_mut(&mut resampler.output, channels, frames_out),
+            ) {
+                (Ok(input), Ok(mut output)) => resampler
+                    .resampler
+                    .process_into_buffer(&input, &mut output, None)
+                    .map_err(|e| e.to_string()),
+                _ => Err(String::from("Invalid Resample Buffer Sizes")),
+            };
 
             // Regardless of whether this works or not, we should clear our buffer, lest we get stuck.
             resampler.input_buffer.clear();
