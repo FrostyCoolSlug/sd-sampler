@@ -12,6 +12,7 @@ use std::env;
 use std::time::Duration;
 use tokio::select;
 use tokio::time::interval;
+use crate::actions::clear::draw_all_clears;
 use crate::actions::pad::draw_all_pads;
 
 #[tokio::main]
@@ -35,6 +36,7 @@ async fn main() -> OpenActionResult<()> {
     set_global_event_handler(&globals::GLOBALS);
 
     register_action(actions::pad::PadAction).await;
+    register_action(actions::clear::ClearAction).await;
 
     // Run the Ticker
     tokio::spawn(ticker());
@@ -54,6 +56,7 @@ pub async fn ticker() {
             _ = blink_tick.tick() => {
                 blink = !blink;
                 draw_all_pads(blink).await;
+                draw_all_clears(blink).await;
             }
             _ = clean_tick.tick() => {
                 engine().cleanup()

@@ -30,6 +30,16 @@
       "States": [
         { "Image": "icons/plugin", "ShowTitle": false }
       ]
+    },
+    {
+      "Name": "Clear Sample Pad",
+      "UUID": "com.frostycoolslug.sd-sampler.clear",
+      "Icon": "icons/plugin",
+      "Tooltip": "Button for clearing all samples on a Pad",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "icons/plugin", "ShowTitle": false }
+      ]
     }
   ]
 }
