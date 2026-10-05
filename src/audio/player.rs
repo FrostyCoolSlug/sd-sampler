@@ -13,16 +13,17 @@ use std::io::ErrorKind::UnexpectedEof;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
-use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::errors::Error;
-use symphonia::core::formats::{SeekMode, SeekTo};
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatReader, SeekMode, SeekTo, SeekedTo, TrackType};
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::probe::{Hint, ProbeResult};
+use symphonia::core::units::Timestamp;
 use symphonia::default::get_codecs;
 
 pub struct Player {
     file: PathBuf,
-    probe: ProbeResult,
+    format: Box<dyn FormatReader>,
 
     volume: f32,
 
@@ -55,7 +56,7 @@ impl Player {
         Ok(Self {
             file: audio.file.clone(),
 
-            probe: probe_result?,
+            format: probe_result?,
             volume: 1.0_f32,
             stopping: Arc::new(AtomicBool::new(false)),
             force_stop: Arc::new(AtomicBool::new(false)),
@@ -75,7 +76,7 @@ impl Player {
         })
     }
 
-    fn load_file(file: &PathBuf) -> symphonia::core::errors::Result<ProbeResult> {
+    fn load_file(file: &PathBuf) -> symphonia::core::errors::Result<Box<dyn FormatReader>> {
         // Use the file extension to get a type hint..
         let mut hint = Hint::new();
         if let Some(extension) = file.extension()
@@ -90,7 +91,21 @@ impl Player {
         let format_options = Default::default();
         let metadata_options = Default::default();
 
-        symphonia::default::get_probe().format(&hint, stream, &format_options, &metadata_options)
+        symphonia::default::get_probe().probe(&hint, stream, format_options, metadata_options)
+    }
+
+    /// Builds a seek target for a frame position within the given track.
+    fn seek_to(frame: u64, track_id: u32) -> SeekTo {
+        SeekTo::Timestamp {
+            ts: Timestamp::new(frame as i64),
+            track_id,
+        }
+    }
+
+    /// Converts the position a seek landed on into a (channel interleaved) sample count.
+    fn seeked_samples(seeked_to: SeekedTo, channels: usize) -> u64 {
+        // The timestamp is signed as it may be negative when it lands in encoder delay.
+        seeked_to.actual_ts.get().max(0) as u64 * channels as u64
     }
 
     pub fn calculate_gain(&mut self) {
@@ -112,14 +127,20 @@ impl Player {
     }
 
     fn play_internal(&mut self, looping: bool) -> Result<()> {
-        let reader = &mut self.probe.format;
+        let reader = &mut self.format;
 
         // Grab the Track and it's ID
-        let track = match reader.default_track() {
+        let track = match reader.default_track(TrackType::Audio) {
             Some(track) => track,
             None => bail!("Unable to find Default Track"),
         };
         let track_id = track.id;
+
+        // Grab the Audio Codec Parameters for the track
+        let audio_params = match track.codec_params.as_ref().and_then(|params| params.audio()) {
+            Some(params) => params,
+            None => bail!("Unable to find Audio Codec Parameters"),
+        };
 
         // The per-sample volume change when fading.
         let mut fade_amount: Option<f32> = None;
@@ -128,12 +149,12 @@ impl Player {
         let mut first_frame: Option<u64> = None;
         let mut stop_sample: Option<u64> = None;
 
-        let sample_rate = track.codec_params.sample_rate;
-        let frames = track.codec_params.n_frames;
+        let sample_rate = audio_params.sample_rate;
+        let frames = track.num_frames;
 
         let mut ebu_r128 = None;
 
-        let channels = match track.codec_params.channels {
+        let channels = match audio_params.channels.as_ref() {
             None => bail!("Unable to obtain channel count"),
             Some(channels) => channels.count(),
         };
@@ -188,21 +209,18 @@ impl Player {
         let mut audio_output = None;
 
         // Create a Decoder..
-        let decoder_opts = Default::default();
-        let mut decoder = get_codecs().make(&track.codec_params, &decoder_opts)?;
+        let decoder_opts = AudioDecoderOptions::default().gapless(false);
+        let mut decoder = get_codecs().make_audio_decoder(audio_params, &decoder_opts)?;
 
         // Prepare the Sample Buffer..
-        let mut sample_buffer = None;
+        let mut sample_buffer: Option<Vec<f32>> = None;
 
         // Start the Processed Sample Count..
         let mut samples_processed = if let Some(frame) = first_frame {
-            let seek_time = SeekTo::TimeStamp {
-                ts: frame,
-                track_id,
-            };
+            let seek_time = Player::seek_to(frame, track_id);
 
             match reader.seek(SeekMode::Accurate, seek_time) {
-                Ok(seeked_to) => seeked_to.actual_ts * channels as u64,
+                Ok(seeked_to) => Player::seeked_samples(seeked_to, channels),
                 Err(_) => 0,
             }
         } else {
@@ -219,30 +237,28 @@ impl Player {
         let result = 'main: loop {
             let packet = match reader.next_packet() {
                 Ok(packet) => packet,
-                Err(err) => {
-                    if looping
-                        && !self.stopping.load(Ordering::Relaxed)
-                        && matches!(&err, Error::IoError(error) if error.kind() == UnexpectedEof)
-                    {
-                        let seek_time = SeekTo::TimeStamp {
-                            ts: loop_start,
-                            track_id,
-                        };
-
-                        match reader.seek(SeekMode::Accurate, seek_time) {
-                            Ok(seeked_to) => {
-                                decoder.reset();
-                                samples_processed = seeked_to.actual_ts * channels as u64;
-                                continue;
-                            }
-                            Err(seek_error) => break Err(seek_error),
-                        }
-                    }
-                    break Err(err);
-                }
+                Err(Error::IoError(error)) if error.kind() == UnexpectedEof => None,
+                Err(err) => break Err(err),
             };
 
-            if packet.track_id() != track_id {
+            // No packet means we've hit the end of the stream.
+            let Some(packet) = packet else {
+                if looping && !self.stopping.load(Ordering::Relaxed) {
+                    let seek_time = Player::seek_to(loop_start, track_id);
+
+                    match reader.seek(SeekMode::Accurate, seek_time) {
+                        Ok(seeked_to) => {
+                            decoder.reset();
+                            samples_processed = Player::seeked_samples(seeked_to, channels);
+                            continue;
+                        }
+                        Err(seek_error) => break Err(seek_error),
+                    }
+                }
+                break Ok(());
+            };
+
+            if packet.track_id != track_id {
                 // Doesn't belong to us.
                 continue;
             }
@@ -251,25 +267,26 @@ impl Player {
                 Ok(decoded) => {
                     // Is this the first decoded packet?
                     if audio_output.is_none() && sample_buffer.is_none() {
-                        let spec = *decoded.spec();
-                        let mut out_channels = spec.channels.count();
+                        let spec_rate = decoded.spec().rate();
+                        let spec_channels = decoded.spec().channels().count();
+                        let mut out_channels = spec_channels;
 
                         // This is a mono audio file, we need to replace the spec with a Stereo
                         // spec, then during processing, duplicate and interlace the samples.
-                        if spec.channels.count() == 1 {
+                        if spec_channels == 1 {
                             mono_playback = true;
                             out_channels = 2;
                         }
 
-                        let capacity = decoded.capacity() as u64;
-                        sample_buffer = Some(SampleBuffer::<f32>::new(capacity, spec));
+                        let capacity = decoded.capacity();
+                        sample_buffer = Some(Vec::<f32>::with_capacity(capacity * spec_channels));
 
                         if !self.process_only {
                             let audio_spec = AudioSpecification {
                                 device: self.device.clone(),
-                                rate: spec.rate,
+                                rate: spec_rate,
                                 channels: out_channels,
-                                buffer: capacity as usize,
+                                buffer: capacity,
                             };
 
                             audio_output.replace(get_output(audio_spec)?);
@@ -278,8 +295,9 @@ impl Player {
 
                     if let Some(ref mut buf) = sample_buffer {
                         // Grab out the samples..
-                        buf.copy_interleaved_ref(decoded);
-                        let mut samples = buf.samples().to_vec();
+                        buf.clear();
+                        decoded.copy_to_vec_interleaved(buf);
+                        let mut samples = buf.to_vec();
 
                         if mono_playback {
                             let mut buffer = vec![];
@@ -355,15 +373,13 @@ impl Player {
                             && samples_processed >= stop_sample
                         {
                             if looping && !self.stopping.load(Ordering::Relaxed) {
-                                let seek_time = SeekTo::TimeStamp {
-                                    ts: loop_start,
-                                    track_id,
-                                };
+                                let seek_time = Player::seek_to(loop_start, track_id);
 
                                 match reader.seek(SeekMode::Accurate, seek_time) {
                                     Ok(seeked_to) => {
                                         decoder.reset();
-                                        samples_processed = seeked_to.actual_ts * channels as u64;
+                                        samples_processed =
+                                            Player::seeked_samples(seeked_to, channels);
                                         continue 'main;
                                     }
                                     Err(error) => break 'main Err(error),
@@ -376,14 +392,11 @@ impl Player {
                             // We've been prompted to restart the current track..
                             let start_frame = first_frame.unwrap_or_default();
 
-                            let seek_time = SeekTo::TimeStamp {
-                                ts: start_frame,
-                                track_id,
-                            };
+                            let seek_time = Player::seek_to(start_frame, track_id);
 
                             // Seek the reader backwards to the start..
                             samples_processed = match reader.seek(SeekMode::Accurate, seek_time) {
-                                Ok(seeked_to) => seeked_to.actual_ts * channels as u64,
+                                Ok(seeked_to) => Player::seeked_samples(seeked_to, channels),
                                 Err(e) => {
                                     debug!("Error Seeking: {}", e);
                                     0
@@ -431,23 +444,8 @@ impl Player {
             }
         }
         decoder.finalize();
+        result.map_err(|e| anyhow!(e))
 
-        // Symphonia's reader doesn't seem to have a way to check whether we've finished reading
-        // bytes for the file, so will continue to try until it hits and EoF then drop an error.
-        //
-        // We're going to suppress that error here, with the assumption that if it's reached, the
-        // file has ended, and playback is complete. It's not ideal, but we'll work with it.
-        if let Err(error) = result {
-            if let Error::IoError(ref io_error) = error
-                && io_error.kind() == UnexpectedEof
-            {
-                return Ok(());
-            }
-
-            // Otherwise, throw this error up.
-            bail!(error)
-        }
-        Ok(())
     }
 
     fn processed(total_frames: Option<u64>, current_frame: u64, channels: usize) -> u8 {

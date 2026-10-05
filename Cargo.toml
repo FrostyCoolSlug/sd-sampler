@@ -45,4 +45,4 @@ atomic_float = "1"
 
 # I really need to upgrade these, but keeping them here means I can copypasta from the GoXLR Utility :)
 rubato = "0.16.1"
-symphonia = { version = "0.5", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3"] }
+symphonia = { version = "0.6", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3", "all-meta"] }
