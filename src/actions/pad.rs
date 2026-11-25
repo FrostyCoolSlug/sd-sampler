@@ -9,7 +9,8 @@ use anyhow::anyhow;
 use chrono::Local;
 use log::warn;
 use openaction::{
-    Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
+    Action, Instance, InstanceId, OpenActionResult, async_trait, get_global_settings, get_instance,
+    set_global_settings,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -159,6 +160,27 @@ impl Action for PadAction {
 
     async fn will_disappear(&self, i: &Instance, _s: &Self::Settings) -> OpenActionResult<()> {
         forget(&i.instance_id);
+        Ok(())
+    }
+
+    async fn property_inspector_did_appear(
+        &self,
+        i: &Instance,
+        _s: &Self::Settings,
+    ) -> OpenActionResult<()> {
+        match crate::globals::GLOBALS.current() {
+            Some(settings) => {
+                let _ = i
+                    .send_to_property_inspector(&json!({
+                        "event": "globalSettings",
+                        "settings": settings,
+                    }))
+                    .await;
+            }
+            None => {
+                get_global_settings().await?;
+            }
+        }
         Ok(())
     }
 

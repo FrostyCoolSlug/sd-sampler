@@ -76,6 +76,12 @@ export function useInspector({ defaults = {}, globalDefaults = {}, listEvents = 
       if (!isSame(next, state.globals)) Object.assign(state.globals, next)
     },
     sendToPropertyInspector: (payload) => {
+      if (payload.event === 'globalSettings') {
+        const next = normaliseGlobals(payload.settings)
+        if (!isSame(next, state.globals)) Object.assign(state.globals, next)
+        return
+      }
+
       if (!listEvents.includes(payload.event)) return
       state.lists[payload.event] = Array.isArray(payload.items) ? payload.items : []
     },
@@ -102,7 +108,6 @@ export function useInspector({ defaults = {}, globalDefaults = {}, listEvents = 
     socket.onopen = () => {
       send({ event: registerEvent, uuid })
       send({ event: 'getSettings', context })
-      send({ event: 'getGlobalSettings', context })
       listEvents.forEach(ask)
       pollTimer = setInterval(() => send({ event: 'getSettings', context }), SETTINGS_POLL_MS)
     }

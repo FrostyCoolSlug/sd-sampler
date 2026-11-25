@@ -11,6 +11,7 @@ use openaction::{OpenActionResult, async_trait, get_global_settings, set_global_
 use serde::{Deserialize, Serialize};
 use std::fs::create_dir_all;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 // There are gonna be a few of these, just helps prevent unneeded wrapping :p
 type Event = DidReceiveGlobalSettingsEvent;
@@ -38,8 +39,18 @@ impl Default for GlobalSettings {
     }
 }
 
-pub struct Globals;
-pub static GLOBALS: Globals = Globals;
+pub struct Globals {
+    current: Mutex<Option<GlobalSettings>>,
+}
+pub static GLOBALS: Globals = Globals {
+    current: Mutex::new(None),
+};
+
+impl Globals {
+    pub fn current(&self) -> Option<GlobalSettings> {
+        self.current.lock().unwrap().clone()
+    }
+}
 
 #[async_trait]
 impl GlobalEventHandler for Globals {
@@ -77,24 +88,26 @@ impl GlobalEventHandler for Globals {
         let audio_engine = engine();
 
         // Then set the Sample Path
-        let sample_path = PathBuf::from(settings.samples_directory);
+        let sample_path = PathBuf::from(settings.samples_directory.clone());
         if sample_path.exists() {
             audio_engine.set_samples_dir(sample_path);
         }
 
         audio_engine.set_pre_buffer_ms(settings.pre_buffer_ms);
 
-        let playback = settings.playback_device;
+        let playback = settings.playback_device.clone();
         let playback = (playback != DEFAULT_DEVICE).then_some(playback);
         audio_engine.set_playback_device(playback);
 
-        let capture = settings.capture_device;
+        let capture = settings.capture_device.clone();
         let capture = (capture != DEFAULT_DEVICE).then_some(capture);
         audio_engine.set_recording_device(capture);
 
         // Drop any waveform cache entries whose samples have gone away or changed since last run.
         audio_engine.wave_cache().cleanup();
 
+        // Store the settings for future lookups
+        *self.current.lock().unwrap() = Some(settings);
         Ok(())
     }
 }
