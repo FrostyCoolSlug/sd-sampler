@@ -35,7 +35,7 @@ issue and say how it went.
 
 ## Installation
 
-Grab the `.sdPlugin` file from the [Releases](/releases) page, then:
+Grab the `.sdPlugin` file from the [Releases](https://github.com/FrostyCoolSlug/sd-sampler/releases/latest) page, then:
 
 | Platform | Steps |
 | --- | --- |
