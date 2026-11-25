@@ -8,7 +8,7 @@ pub mod player;
 pub mod recorder;
 pub mod ringbuffer;
 
-mod cpal;
+pub(crate) mod cpal;
 pub mod processors;
 
 #[derive(Debug, Clone)]

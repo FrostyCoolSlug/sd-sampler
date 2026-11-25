@@ -1,10 +1,11 @@
 //! Ok, we need to fetch all the devices, use cpal for this..
 
-use anyhow::{Result};
+use crate::audio::cpal::cpal_config::host;
+use crate::globals::DEFAULT_DEVICE;
+use anyhow::Result;
 use cpal::Device;
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde_json::{Value, json};
-use crate::globals::DEFAULT_DEVICE;
 
 #[derive(Debug)]
 struct DisplayDevice {
@@ -56,8 +57,7 @@ fn item(d: &DisplayDevice) -> Value {
 fn sinks_list() -> Result<Vec<DisplayDevice>> {
     let mut list: Vec<DisplayDevice> = vec![];
 
-    let host = cpal::default_host();
-    for device in host.output_devices()? {
+    for device in host().output_devices()? {
         list.push(get_device(device)?);
     }
     Ok(list)
@@ -66,8 +66,7 @@ fn sinks_list() -> Result<Vec<DisplayDevice>> {
 fn sources_list() -> Result<Vec<DisplayDevice>> {
     let mut list: Vec<DisplayDevice> = vec![];
 
-    let host = cpal::default_host();
-    for device in host.input_devices()? {
+    for device in host().input_devices()? {
         list.push(get_device(device)?);
     }
     Ok(list)

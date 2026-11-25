@@ -1,14 +1,24 @@
 use anyhow::{Result, anyhow};
 use cpal::traits::HostTrait;
-use cpal::{Device, DeviceId, default_host};
+use cpal::{Device, DeviceId};
 use std::str::FromStr;
+use std::sync::OnceLock;
 use log::{info};
+
+/// A process wide cpal Host, so we're not establishing new connections for every
+/// lookup.
+static HOST: OnceLock<cpal::Host> = OnceLock::new();
+
+/// The shared audio host, created lazily on first use.
+pub(crate) fn host() -> &'static cpal::Host {
+    HOST.get_or_init(cpal::default_host)
+}
 
 pub struct CpalConfiguration {}
 
 impl CpalConfiguration {
     pub(crate) fn get_device(device: Option<String>, input: bool) -> Result<Device> {
-        let host = default_host();
+        let host = host();
 
         if let Some(device) = device {
             let id = DeviceId::from_str(&device)?;
