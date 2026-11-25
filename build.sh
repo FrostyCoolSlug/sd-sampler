@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+#
+# Builds the plugin and either packages it or installs it into OpenDeck.
+#
+#   ./build.sh --package   Create com.frostycoolslug.sd-sampler.sdPlugin (a zip) in the project root (default).
+#                          Uses `cargo build --locked` and `npm ci`, so it matches the lockfiles exactly.
+#   ./build.sh --install   Install straight into OpenDeck's plugin directory. Uses looser dev builds.
+#
+# Set OPENDECK_PLUGINS_DIR to override the install location
+# (default: $XDG_CONFIG_HOME/opendeck/plugins, or ~/.config/opendeck/plugins).
+#
+# Linux only: the binary is copied as `sd-sampler` with no platform suffix. Windows and macOS
+# builds are assembled by the GitHub Actions workflow in .github/workflows/release.yml.
+
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
