@@ -23,32 +23,32 @@
     {
       "Name": "Sample Pad",
       "UUID": "com.frostycoolslug.sd-sampler.pad",
-      "Icon": "icons/plugin",
+      "Icon": "icons/pad",
       "Tooltip": "Button for playing and recording samples",
       "Controllers": ["Keypad"],
       "PropertyInspectorPath": "property_inspector/plugin.html",
       "States": [
-        { "Image": "icons/plugin", "ShowTitle": false }
+        { "Image": "icons/pad", "ShowTitle": false }
       ]
     },
     {
       "Name": "Clear Sample Pad",
       "UUID": "com.frostycoolslug.sd-sampler.clear",
-      "Icon": "icons/plugin",
+      "Icon": "icons/clear",
       "Tooltip": "Button for clearing all samples on a Pad",
       "Controllers": ["Keypad"],
       "States": [
-        { "Image": "icons/plugin", "ShowTitle": false }
+        { "Image": "icons/clear", "ShowTitle": false }
       ]
     },
     {
       "Name": "Add to Sample Pad",
       "UUID": "com.frostycoolslug.sd-sampler.add",
-      "Icon": "icons/plugin",
+      "Icon": "icons/add",
       "Tooltip": "Button for adding a new sample to the end of a Pad's stack",
       "Controllers": ["Keypad"],
       "States": [
-        { "Image": "icons/plugin", "ShowTitle": false }
+        { "Image": "icons/add", "ShowTitle": false }
       ]
     }
   ]
