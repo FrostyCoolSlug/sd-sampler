@@ -221,7 +221,7 @@ pub fn pad(v: &PadView) -> String {
         body += &format!(
             r#"<rect x="10" y="10" width="{badge_w}" height="22" rx="11" fill="{accent}" fill-opacity=".15"/>"#
         );
-        body += &text(18.0, 26.0, 12.0, accent, 1.0, "start", &v.badge);
+        body += &text(10.0 + badge_w / 2.0, 26.0, 12.0, accent, 1.0, "middle", &v.badge);
         if v.count > 0 {
             body += &text(
                 134.0,
