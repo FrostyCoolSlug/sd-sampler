@@ -73,7 +73,13 @@ function draw () {
 
   const accent = getComputedStyle(el).getPropertyValue('--accent').trim() || '#7aa2f7'
   const n = peaks.length
-  const slot = W / n
+
+  const THUMB = 14
+  const pad = THUMB / 2
+  const span = W - THUMB
+  if (span <= 0) return
+
+  const slot = span / n
   const barW = Math.max(1, slot * 0.8)
   const a = start.value / 100, b = end.value / 100
 
@@ -83,7 +89,8 @@ function draw () {
     const h = Math.max(2, amp * H)
     const pos = (i + 0.5) / n
     ctx.globalAlpha = (pos >= a && pos <= b) ? 1 : 0.24
-    ctx.fillRect(i * slot + (slot - barW) / 2, (H - h) / 2, barW, h)
+    const cx = pad + (i + 0.5) * slot
+    ctx.fillRect(cx - barW / 2, (H - h) / 2, barW, h)
   }
   ctx.globalAlpha = 1
 }
