@@ -11,6 +11,11 @@ DEST="$HOME/.config/opendeck/plugins"
 
 cargo build --release
 
+cd web
+npm install
+npm run build
+cd ..
+
 mkdir -p "$DEST/$ID"
 
 cp -r plugin/$ID/. "$DEST/$ID/"
