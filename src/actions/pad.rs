@@ -3,6 +3,7 @@ use crate::actions::alert_on_error;
 use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
+use crate::globals::GLOBALS;
 use crate::svg;
 use crate::svg::{PadState, PadView};
 use anyhow::anyhow;
@@ -168,18 +169,15 @@ impl Action for PadAction {
         i: &Instance,
         _s: &Self::Settings,
     ) -> OpenActionResult<()> {
-        match crate::globals::GLOBALS.current() {
-            Some(settings) => {
-                let _ = i
-                    .send_to_property_inspector(&json!({
-                        "event": "globalSettings",
-                        "settings": settings,
-                    }))
-                    .await;
-            }
-            None => {
-                get_global_settings().await?;
-            }
+        // Realistically, this will always be Some as the initial population happens during
+        // plugin load. Not gonna straight unwrap() it though, that would be insane :D
+        if let Some(settings) = GLOBALS.current() {
+            let _ = i
+                .send_to_property_inspector(&json!({
+                    "event": "globalSettings",
+                    "settings": settings,
+                }))
+                .await;
         }
         Ok(())
     }
