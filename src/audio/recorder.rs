@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{fs, vec};
 
 use super::backend::{AudioInput, AudioSpecification, get_input};
@@ -20,6 +20,7 @@ use rb::{Producer, RB, RbConsumer, RbError, RbProducer, SpscRb};
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(0);
 static READ_TIMEOUT: Duration = Duration::from_millis(100);
+static CHECK_PERIOD: Duration = Duration::from_secs(60 * 15);
 
 pub struct BufferedRecorder {
     device: Option<String>,
@@ -82,6 +83,7 @@ impl BufferedRecorder {
 
         // We need to find a matching input..
         let mut input: Option<Box<dyn AudioInput>> = None;
+        let mut now = Instant::now();
 
         while !self.stop.load(Ordering::Relaxed) {
             if input.is_none() {
@@ -130,6 +132,39 @@ impl BufferedRecorder {
                         self.buffer.clear();
                     }
                 }
+            }
+
+            if now.elapsed() > CHECK_PERIOD {
+                now = Instant::now();
+
+                if !self.producers.lock().unwrap().is_empty() {
+                    // Something is actively recording, don't break the loop..
+                    continue;
+                }
+
+                if let Ok(ebu) = &mut EbuR128::new(2, 48000, Mode::SAMPLE_PEAK) {
+                    // Grab the samples from the buffer..
+                    let samples = self.get_samples_from_buffer();
+
+                    // Check if any of them would constitute 'recordable' audio..
+                    let mut received_audio = false;
+                    if let Ok(has_audio) = self.is_audio(ebu, samples.as_slice()) {
+                        received_audio = has_audio;
+                    }
+
+                    // Push out and let it continue..
+                    if received_audio {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+
+                // If we get here, nothing has stopped us, tear down the audio handler, and sleep..
+                input.unwrap().flush();
+                input = None;
+                self.is_ready.store(false, Ordering::Relaxed);
+                self.buffer.clear();
             }
         }
 
