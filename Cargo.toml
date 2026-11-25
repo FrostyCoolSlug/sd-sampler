@@ -30,7 +30,7 @@ openaction = "2.7.0"
 chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
 fastrand = "2.5.0"
 walkdir = "2"
-rfd = "0.17.2"
+rfd = "0.18.0"
 open = "5.4.4"
 base64 = "0.23.1"
 
