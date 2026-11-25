@@ -8,8 +8,9 @@ use crate::audio::recorder::{BufferedRecorder, RecorderState};
 use anyhow::{Result, bail};
 
 use crate::audio::AudioFile;
-use crate::audio::processors::peaks::compute_peaks;
+use crate::audio::processors::peaks::pool_down;
 use crate::globals::{DEFAULT_DEVICE, GlobalSettings};
+use crate::wavecache::WaveCache;
 use directories::BaseDirs;
 use log::{debug, error, info, warn};
 use openaction::InstanceId;
@@ -82,6 +83,9 @@ pub struct Engine {
     /// Cache of Peak Generations
     peaks: Arc<Mutex<PeakCache>>,
 
+    /// Disk-backed peak cache, survives restarts
+    wave_cache: WaveCache,
+
     /// Whether the 'Clear' action is active
     clear_armed: AtomicBool,
 
@@ -114,6 +118,7 @@ impl Engine {
             playing: Mutex::new(HashMap::new()),
             recording: Mutex::new(HashMap::new()),
             peaks: Arc::new(Mutex::new(PeakCache::default())),
+            wave_cache: WaveCache::new(),
             clear_armed: AtomicBool::new(false),
             last_pressed: Mutex::new(None),
         }
@@ -280,21 +285,35 @@ impl Engine {
     }
 
     pub fn waveform(&self, file: &str) -> Option<Vec<f64>> {
+        let path = self.samples_dir().join(file);
+
+        // In-memory first..
+        {
+            let cache = self.peaks.lock().unwrap();
+            if let Some(p) = cache.done.get(file) {
+                return if p.is_empty() { None } else { Some(pool_down(p, 40)) };
+            }
+        }
+
+        // ..then the on-disk cache, which survives a restart.
+        if let Some(peaks) = self.wave_cache.load(&path) {
+            let mut cache = self.peaks.lock().unwrap();
+            cache.done.insert(file.to_string(), peaks.clone());
+            return Some(pool_down(&peaks, 40));
+        }
+
+        // If we get here, this hasn't been cached yet, generate the waveform
         {
             let mut cache = self.peaks.lock().unwrap();
-            if let Some(p) = cache.done.get(file) {
-                return if p.is_empty() { None } else { Some(p.clone()) };
-            }
             if !cache.pending.insert(file.to_string()) {
                 return None;
             }
         }
 
-        // If we get here, this hasn't been cached yet, generate the waveform
-        let path = self.samples_dir().join(file);
         let (cache, name) = (self.peaks.clone(), file.to_string());
+        let wave_cache = self.wave_cache.clone();
         thread::spawn(move || {
-            let result = compute_peaks(&path, 40);
+            let result = wave_cache.compute_or_get(&path);
             if let Err(e) = &result {
                 warn!("Unable to compute the waveform for {name}: {e}");
             }
@@ -303,6 +322,11 @@ impl Engine {
             cache.done.insert(name, result.unwrap_or_default());
         });
         None
+    }
+
+    /// The disk-backed peak cache, shared with the property inspector's track peaks.
+    pub fn wave_cache(&self) -> &WaveCache {
+        &self.wave_cache
     }
 
     /////////////////////////////////////////////////////////////////////

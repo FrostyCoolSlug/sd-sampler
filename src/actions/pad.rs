@@ -90,6 +90,10 @@ pub struct Track {
 
     /// Linear gain that brings the file to -23dB LUFS EBU R128
     pub gain: f64,
+
+    /// Waveform peaks (0.0-1.0) for the property inspector's trim control.
+    #[serde(default)]
+    pub peaks: Vec<f64>,
 }
 
 impl Track {
@@ -99,6 +103,7 @@ impl Track {
             start: 0.0,
             end: 100.0,
             gain,
+            peaks: vec![],
         }
     }
 
@@ -111,6 +116,37 @@ impl Track {
             stop_pct: Some(self.end),
         }
     }
+}
+
+/// Compute waveform peaks for any track that doesn't have them yet, off the async runtime.
+/// Peaks go through the on-disk cache, so a restart (or another pad using the same sample)
+/// doesn't redecode the file.
+async fn fill_peaks(tracks: &mut [Track]) {
+    let dir = engine().samples_dir();
+
+    for t in tracks.iter_mut() {
+        if t.peaks.is_empty() {
+            let cache = engine().wave_cache().clone();
+            let path = dir.join(&t.file);
+            let file = t.file.clone();
+            match blocking(move || cache.compute_or_get(&path)).await {
+                Ok(peaks) => t.peaks = peaks,
+                Err(e) => warn!("Unable to compute waveform for {file}: {e:#}"),
+            }
+        }
+    }
+}
+
+/// Make sure every track on this pad has its waveform peaks
+async fn ensure_waveforms(i: &Instance) {
+    let Some(mut settings) = recall(&i.instance_id) else {
+        return;
+    };
+    if !settings.tracks.iter().any(|t| t.peaks.is_empty()) {
+        return;
+    }
+    fill_peaks(&mut settings.tracks).await;
+    let _ = save(i, &settings).await;
 }
 
 /// Defines the next action to be performed on press
@@ -236,6 +272,7 @@ impl Action for PadAction {
 
                         let mut updated = s.clone();
                         updated.tracks.push(track);
+                        fill_peaks(&mut updated.tracks).await;
 
                         save(i, &updated).await?;
                     }
@@ -259,6 +296,15 @@ impl Action for PadAction {
         let file = s.add_file.trim().to_string();
 
         if file.is_empty() || !ADDING.lock().unwrap().insert(id.clone()) {
+            // Make sure tracks have their waveforms
+            if s.tracks.iter().any(|t| t.peaks.is_empty()) {
+                let id = i.instance_id.clone();
+                tokio::spawn(async move {
+                    if let Some(instance) = get_instance(id).await {
+                        ensure_waveforms(&instance).await;
+                    }
+                });
+            }
             return Ok(());
         }
 
@@ -283,6 +329,7 @@ impl Action for PadAction {
                     let _ = instance.show_alert().await;
                 }
             }
+            fill_peaks(&mut settings.tracks).await;
             let _ = save(&instance, &settings).await;
         });
         Ok(())

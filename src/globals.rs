@@ -92,6 +92,9 @@ impl GlobalEventHandler for Globals {
         let capture = (capture != DEFAULT_DEVICE).then_some(capture);
         audio_engine.set_recording_device(capture);
 
+        // Drop any waveform cache entries whose samples have gone away or changed since last run.
+        audio_engine.wave_cache().cleanup();
+
         Ok(())
     }
 }

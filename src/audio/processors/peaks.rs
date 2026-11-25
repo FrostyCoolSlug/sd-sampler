@@ -12,6 +12,11 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::default::{get_codecs, get_probe};
 
+/// The canonical number of waveform peaks computed per sample. Consumers that want fewer
+/// (e.g. the button renderer) pool a cached result down with [`pool_down`] rather than
+/// redecoding the file.
+pub const WAVE_BUCKETS: usize = 128;
+
 pub fn compute_peaks(path: &Path, buckets: usize) -> Result<Vec<f64>> {
     let buckets = buckets.clamp(16, 4096);
 
@@ -87,13 +92,22 @@ pub fn compute_peaks(path: &Path, buckets: usize) -> Result<Vec<f64>> {
         return Ok(vec![0.0; buckets]);
     }
 
+    Ok(pool_down(&blocks, buckets))
+}
+
+/// Collapse a fine-grained peak calculation into buckets of a predefined size (the UI and
+/// the pads have a differing number of peaks, so this allows both to be processed)
+pub fn pool_down(src: &[f64], buckets: usize) -> Vec<f64> {
+    let buckets = buckets.clamp(1, 4096);
+    if src.is_empty() {
+        return vec![];
+    }
+
     let mut out = vec![0f64; buckets];
     for (i, o) in out.iter_mut().enumerate() {
-        let a = i * blocks.len() / buckets;
-        let b = (((i + 1) * blocks.len()) / buckets)
-            .max(a + 1)
-            .min(blocks.len());
-        *o = blocks[a..b].iter().cloned().fold(0.0, f64::max);
+        let a = i * src.len() / buckets;
+        let b = (((i + 1) * src.len()) / buckets).max(a + 1).min(src.len());
+        *o = src[a..b].iter().cloned().fold(0.0, f64::max);
     }
-    Ok(out)
+    out
 }

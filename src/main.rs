@@ -4,6 +4,7 @@ pub mod devices;
 mod engine;
 pub mod globals;
 pub mod svg;
+mod wavecache;
 
 use crate::engine::engine;
 use openaction::global_events::set_global_event_handler;
