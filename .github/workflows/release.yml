@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [Cargo.toml, Cargo.lock]
+  workflow_dispatch:
+
+env:
+  ID: com.frostycoolslug.sd-sampler.sdPlugin
+
+permissions:
+  contents: write   # needed to create the release and tag
+
+jobs:
+  # Decides whether this push is a new version. Cargo.toml is the single source of truth.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Cargo.lock is in sync
+        run: |
+          cargo metadata --locked --format-version 1 >/dev/null || {
+            echo "::error::Cargo.lock is out of date, run cargo build and commit it"
+            exit 1
+          }
+
+      - id: v
+        run: |
+          V=$(cargo metadata --no-deps --format-version 1 \
+                | jq -r '.packages[] | select(.name == "sd-sampler") | .version')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Not on main, skipping release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+            echo "Tag v$V already exists, skipping"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04,   target: x86_64-unknown-linux-gnu, bin: sd-sampler }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,   bin: sd-sampler.exe }
+          - { os: macos-latest,   target: aarch64-apple-darwin,     bin: sd-sampler }
+          - { os: macos-latest,   target: x86_64-apple-darwin,      bin: sd-sampler }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # A single file path means the artifact contains just the binary, no target/ nesting
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+          if-no-files-found: error
+
+  package:
+    needs: [version, build]
+    runs-on: macos-latest   # lipo and codesign only exist on macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # Same as build.sh: the PI build lands in plugin/$ID
+      - name: Build property inspector
+        run: cd web && npm ci && npm run build
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist   # dist/bin-<target>/<binary>
+
+      - name: Assemble plugin
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          STAGE=$(mktemp -d)
+          mkdir -p "$STAGE/$ID" out
+          cp -R "plugin/$ID/." "$STAGE/$ID/"
+
+          # Stamp the manifest so it can never drift from Cargo.toml
+          # (Stream Deck wants four parts, and no pre-release suffix)
+          MANIFEST="$STAGE/$ID/manifest.json"
+          jq --arg v "${VERSION%%-*}.0" '.Version = $v' "$MANIFEST" > "$MANIFEST.tmp"
+          mv "$MANIFEST.tmp" "$MANIFEST"
+
+          # Binaries
+          cp dist/bin-x86_64-unknown-linux-gnu/sd-sampler "$STAGE/$ID/sd-sampler"
+          cp dist/bin-x86_64-pc-windows-msvc/sd-sampler.exe "$STAGE/$ID/sd-sampler.exe"
+          lipo -create -output "$STAGE/$ID/sd-sampler-mac" \
+            dist/bin-aarch64-apple-darwin/sd-sampler \
+            dist/bin-x86_64-apple-darwin/sd-sampler
+
+          # Artifacts don't preserve permissions, so restore them
+          chmod 755 "$STAGE/$ID/sd-sampler" "$STAGE/$ID/sd-sampler-mac"
+
+          # lipo invalidates signatures, and Apple Silicon refuses unsigned binaries
+          codesign --force --sign - "$STAGE/$ID/sd-sampler-mac"
+
+          # Zip under a temp name, then move, so zip never touches the final filename
+          (cd "$STAGE" && zip -qrX "$STAGE/out.zip" "$ID")
+          mv "$STAGE/out.zip" "out/$ID"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin
+          path: out/${{ env.ID }}
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: out/${{ env.ID }}
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.version.outputs.version, '-') }}
