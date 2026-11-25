@@ -26,9 +26,6 @@ directories = "6.0"
 ### Stream Deck ###
 openaction = "2.7.0"
 
-### PulseAudio Handlers
-cpal = { version = "0.18.2", features = ["pulseaudio"]}
-
 ### Utility Crates
 chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
 fastrand = "2.5.0"
@@ -44,3 +41,9 @@ rb = "0.4"
 atomic_float = "1"
 rubato = "5.0"
 symphonia = { version = "0.6", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3", "all-meta"] }
+
+### PulseAudio Handlers
+cpal = "0.18.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18.2", features = ["pulseaudio"] }
