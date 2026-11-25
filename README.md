@@ -164,6 +164,18 @@ Tools that can create virtual channels and route between them should do the job:
 
 ---
 
+## Building
+
+Want to build it yourself? You'll need Rust, Node.js and `zip`. Then:
+
+```bash
+./build.sh --install   # build and install into OpenDeck, restart it afterwards
+./build.sh --package   # build a .sdPlugin file in the project root (the default)
+```
+
+The script is Linux only. Windows and macOS builds come from the GitHub Actions workflow. Manual builds can be done,
+but you'll have to read the Linux script.
+
 ## License
 
 Copyright © 2026 Craig McLure, see [LICENSE](LICENSE).
