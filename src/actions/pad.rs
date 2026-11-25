@@ -171,6 +171,14 @@ impl Action for PadAction {
             return Ok(());
         }
 
+        // If add mode is armed, hold to record a new sample onto this pad
+        if local_engine.add_armed() {
+            let name = format!("Recording_{}.wav", Local::now().format("%Y-%m-%dT%H%M%S"));
+            let result = local_engine.record(&id, name.into());
+            alert_on_error(i, result).await?;
+            return Ok(());
+        }
+
         match self.get_press(&id, s) {
             PressAction::Record => {
                 let id = i.instance_id.clone();
@@ -225,6 +233,36 @@ impl Action for PadAction {
             cleared.tracks.clear();
 
             return save(i, &cleared).await;
+        }
+
+        if engine_local.add_armed() {
+            let was_recording = engine_local.is_recording(&id);
+            engine_local.set_add_armed(false);
+
+            // If we were recording, stop and append the new sample to the end of the stack
+            if was_recording {
+                let result = engine_local.stop_recording(&id);
+                match alert_on_error(i, result).await? {
+                    Some(Some(recorded)) => {
+                        let track = Track::new(recorded.file, recorded.gain);
+
+                        let mut updated = s.clone();
+                        updated.tracks.push(track);
+
+                        save(i, &updated).await?;
+                    }
+                    Some(None) => i.show_alert().await?,
+                    None => {}
+                }
+            }
+
+            return Ok(());
+        }
+
+        // If a pad with samples is still recording (e.g. add mode was disarmed while it was
+        // held), discard the in-progress recording rather than letting it run on
+        if !s.tracks.is_empty() && engine_local.is_recording(&id) {
+            let _ = engine_local.stop_recording(&id);
         }
 
         match self.get_release(&id, s) {
@@ -470,6 +508,8 @@ async fn draw_pad(instance: &Instance, s: &PadActionSettings, blink: bool) -> Op
         PadState::Empty
     } else if engine_local.clear_armed() {
         PadState::ClearArmed
+    } else if engine_local.add_armed() {
+        PadState::RecordArmed
     } else {
         PadState::Idle
     };

@@ -89,6 +89,9 @@ pub struct Engine {
     /// Whether the 'Clear' action is active
     clear_armed: AtomicBool,
 
+    /// Whether the 'Add Sample' action is active
+    add_armed: AtomicBool,
+
     /// The last instance that was pressed
     last_pressed: Mutex<Option<InstanceId>>,
 }
@@ -120,6 +123,7 @@ impl Engine {
             peaks: Arc::new(Mutex::new(PeakCache::default())),
             wave_cache: WaveCache::new(),
             clear_armed: AtomicBool::new(false),
+            add_armed: AtomicBool::new(false),
             last_pressed: Mutex::new(None),
         }
     }
@@ -474,6 +478,14 @@ impl Engine {
 
     pub(crate) fn set_clear_armed(&self, armed: bool) {
         self.clear_armed.store(armed, Ordering::Relaxed)
+    }
+
+    pub(crate) fn add_armed(&self) -> bool {
+        self.add_armed.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_add_armed(&self, armed: bool) {
+        self.add_armed.store(armed, Ordering::Relaxed)
     }
 
     pub(crate) fn to_global_settings(&self) -> GlobalSettings {

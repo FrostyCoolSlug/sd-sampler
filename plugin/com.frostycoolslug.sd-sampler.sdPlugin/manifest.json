@@ -40,6 +40,16 @@
       "States": [
         { "Image": "icons/plugin", "ShowTitle": false }
       ]
+    },
+    {
+      "Name": "Add to Sample Pad",
+      "UUID": "com.frostycoolslug.sd-sampler.add",
+      "Icon": "icons/plugin",
+      "Tooltip": "Button for adding a new sample to the end of a Pad's stack",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "icons/plugin", "ShowTitle": false }
+      ]
     }
   ]
 }

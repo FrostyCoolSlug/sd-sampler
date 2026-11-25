@@ -18,6 +18,9 @@ pub enum PadState {
 
     /// Clear Samples is Armed!
     ClearArmed,
+
+    /// Add Sample is Armed - Hold to Record a New Sample
+    RecordArmed,
 }
 
 pub struct PadView {
@@ -206,10 +209,14 @@ pub fn pad(v: &PadView) -> String {
         PadState::Playing => ("#125234", "#78ecaa"),
         PadState::Recording => ("#841c22", "#ffa0a0"),
         PadState::ClearArmed => ("#7c5414", "#ffd070"),
+        PadState::RecordArmed => ("#14503e", "#6ff0c8"),
     };
     let mut body = String::new();
 
-    if !matches!(v.state, PadState::Recording | PadState::ClearArmed) {
+    if !matches!(
+        v.state,
+        PadState::Recording | PadState::ClearArmed | PadState::RecordArmed
+    ) {
         let badge_w = v.badge.chars().count() as f64 * 8.0 + 16.0;
         body += &format!(
             r#"<rect x="10" y="10" width="{badge_w}" height="22" rx="11" fill="{accent}" fill-opacity=".15"/>"#
@@ -250,6 +257,25 @@ pub fn pad(v: &PadView) -> String {
             body += &format!(r#"<circle cx="34" cy="64" r="11" fill="{dot}"/>"#);
             body += &text(54.0, 74.0, 28.0, WHITE, 1.0, "start", "REC");
             body += &text(72.0, 124.0, 40.0, WHITE, 1.0, "middle", &mmss(v.secs));
+        }
+        PadState::RecordArmed => {
+            let dot = if v.blink { WHITE } else { RED };
+            body += &format!(
+                r#"
+                    <circle cx="72" cy="64" r="24" fill="none" stroke="{accent}" stroke-opacity=".5" stroke-width="4" />
+                    <circle cx="72" cy="64" r="11" fill="{dot}" />
+                "#
+            );
+            body += &text(72.0, 108.0, 22.0, WHITE, 1.0, "middle", "ADD?");
+            body += &text(
+                72.0,
+                130.0,
+                12.0,
+                accent,
+                0.86,
+                "middle",
+                &trunc(&v.name, 16),
+            );
         }
         PadState::ClearArmed => {
             let o = if v.blink { 1.0 } else { 0.6 };

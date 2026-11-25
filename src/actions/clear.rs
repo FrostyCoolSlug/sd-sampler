@@ -50,6 +50,9 @@ impl Action for ClearAction {
         // Toggle the Global 'Armed' State
         let new = !engine().clear_armed();
         engine().set_clear_armed(new);
+        if new {
+            engine().set_add_armed(false);
+        }
         Ok(())
     }
 }
