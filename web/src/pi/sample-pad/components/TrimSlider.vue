@@ -10,21 +10,42 @@ const props = defineProps({
 })
 const { save } = inject('inspector')
 
-// `track` is a live object inside the reactive settings, so the sliders edit it
-// directly and `save` (on release) persists the whole settings object.
+const start = ref(props.track.start)
+const end = ref(props.track.end)
+const dragging = ref(false)
+
+watch(
+  () => [props.track.start, props.track.end],
+  ([s, e]) => {
+    if (!dragging.value) {
+      start.value = s
+      end.value = e
+    }
+  },
+)
+
+const beginDrag = () => {
+  dragging.value = true
+}
 
 // Keep the two thumbs from crossing while dragging.
 const clampStart = () => {
-  if (props.track.start > props.track.end) props.track.start = props.track.end
+  if (start.value > end.value) start.value = end.value
 }
 const clampEnd = () => {
-  if (props.track.end < props.track.start) props.track.end = props.track.start
+  if (end.value < start.value) end.value = start.value
+}
+
+function commit() {
+  props.track.start = start.value
+  props.track.end = end.value
+  dragging.value = false
+  save()
 }
 
 // The start thumb sits on top past the midpoint so it stays grabbable when both overlap at 100%.
-const startZIndex = computed(() => (props.track.start >= 50 ? 2 : 1))
-
-const readout = computed(() => `${(+props.track.start).toFixed(1)} – ${(+props.track.end).toFixed(1)}%`)
+const startZIndex = computed(() => (start.value >= 50 ? 2 : 1))
+const readout = computed(() => `${(+start.value).toFixed(1)} – ${(+end.value).toFixed(1)}%`)
 
 // Waveform: draw the track's peaks behind the thumbs, dimming the region outside the trim.
 // Peaks arrive asynchronously from the plugin (computed off-thread), so this redraws whenever
@@ -54,7 +75,7 @@ function draw () {
   const n = peaks.length
   const slot = W / n
   const barW = Math.max(1, slot * 0.8)
-  const a = props.track.start / 100, b = props.track.end / 100
+  const a = start.value / 100, b = end.value / 100
 
   ctx.fillStyle = accent
   for (let i = 0; i < n; i++) {
@@ -76,28 +97,30 @@ onMounted(() => {
   requestAnimationFrame(draw)
 })
 onBeforeUnmount(() => observer?.disconnect())
-watch(() => [props.peaks, props.track.start, props.track.end], draw)
+watch([() => props.peaks, start, end], draw)
 </script>
 
 <template>
   <div class="slider">
     <!-- Two thumbs on one rail: start and end of the part of the sample that plays. -->
-    <div class="dual" :style="{ '--a': track.start, '--b': track.end }">
+    <div class="dual" :style="{ '--a': start, '--b': end }">
       <canvas ref="wave" class="wave"></canvas>
       <div class="rail"></div>
       <div class="fill"></div>
       <input
         type="range" min="0" max="100" step="0.1"
-        v-model.number="track.start"
+        v-model.number="start"
         :style="{ zIndex: startZIndex }"
+        @pointerdown="beginDrag"
         @input="clampStart"
-        @change="save"
+        @change="commit"
       />
       <input
         type="range" min="0" max="100" step="0.1"
-        v-model.number="track.end"
+        v-model.number="end"
+        @pointerdown="beginDrag"
         @input="clampEnd"
-        @change="save"
+        @change="commit"
       />
     </div>
     <span class="val">{{ readout }}</span>
