@@ -133,6 +133,7 @@ pub enum ReleaseAction {
 pub struct PadAction;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PadActionSettings {
     pub name: String,
 
@@ -140,8 +141,6 @@ pub struct PadActionSettings {
     pub order: PlayOrder,
 
     pub tracks: Vec<Track>,
-
-    #[serde(default)]
     pub cursor: usize,
 
     // A File Being Added
