@@ -3,10 +3,11 @@ use crate::actions::alert_on_error;
 use crate::audio::{AudioFile, normalised_gain};
 use crate::devices::{sinks, sources};
 use crate::engine::{PlaybackState, engine};
+use crate::svg;
 use crate::svg::{PadState, PadView};
 use anyhow::anyhow;
 use chrono::Local;
-use log::{debug, warn};
+use log::warn;
 use openaction::{
     Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
 };
@@ -15,7 +16,6 @@ use serde_json::{Value, json};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
-use crate::svg;
 
 const FADE_OUT_MILLIS: u32 = 500;
 
@@ -315,7 +315,8 @@ impl Action for PadAction {
                     cache.store_gain(&sample, gain);
                     Ok(gain)
                 }
-            }).await;
+            })
+            .await;
             ADDING.lock().unwrap().remove(&id);
 
             let Some(instance) = get_instance(id.clone()).await else {
@@ -521,7 +522,7 @@ async fn draw_pad(instance: &Instance, s: &PadActionSettings, blink: bool) -> Op
 
     // For the waveform, we show either the active file, or the first file.
     let base = engine_local.samples_dir();
-    let current = engine_local.active_playback_file(&id);
+    let current = engine_local.active_playback_file(id);
     let shown = current
         .as_ref()
         .and_then(|p| s.tracks.iter().find(|t| base.join(t.file.clone()) == *p))
@@ -539,7 +540,7 @@ async fn draw_pad(instance: &Instance, s: &PadActionSettings, blink: bool) -> Op
         count: s.tracks.len(),
         wave,
         trim,
-        progress: engine_local.elapsed(&id),
+        progress: engine_local.elapsed(id),
         secs: recording.map(|d| d.as_secs_f64()).unwrap_or(0.0),
         blink,
     };
