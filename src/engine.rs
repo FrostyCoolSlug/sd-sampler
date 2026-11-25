@@ -159,6 +159,7 @@ impl Engine {
         if *self.playback_device.read().unwrap() == device {
             return;
         }
+        debug!("Playback Device changed to {:?}, restarting..", device);
 
         // Ok, we need to stop all current playback, and update the device
         self.stop_all();
@@ -175,6 +176,7 @@ impl Engine {
             return;
         }
 
+        debug!("Recording Device changed to {:?}, restarting..", device);
         self.stop_recorder();
         *self.recording_device.write().unwrap() = device;
         self.spawn_recorder();
