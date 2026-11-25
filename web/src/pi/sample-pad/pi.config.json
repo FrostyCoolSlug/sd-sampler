@@ -1,0 +1,19 @@
+{
+  "defaults": {
+    "name": "",
+    "function": "PlayNext",
+    "order": "Sequential",
+    "fade_out_ms": 500,
+    "capture_device": "@DEFAULT_DEVICE@",
+    "playback_device": "@DEFAULT_DEVICE@",
+    "tracks": [],
+    "add_file": ""
+  },
+  "globalDefaults": {
+    "pre_buffer_ms": 0,
+    "samples_directory": ""
+  },
+  "listEvents": ["getSources", "getSinks", "getSamples", "getPeaks"],
+  "arrayFields": ["tracks", "playback_sinks"],
+  "out": "../plugin/com.frostycoolslug.sd-sampler.sdPlugin/property_inspector/plugin.html"
+}
