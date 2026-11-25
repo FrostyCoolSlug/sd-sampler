@@ -19,6 +19,7 @@ npm run build
 cd ..
 
 # Create a temporary directory to assemble things into
+rm -rf $DEST
 mkdir -p "$DEST/$ID"
 
 # AVENGERS, ASSEMBLE
@@ -32,6 +33,7 @@ rm "$WD"/"$ID"
 cd $DEST
 zip -r "$WD"/"$ID" $ID
 cd "$WD"
+rm -rf $DEST
 
 # Done.
 
