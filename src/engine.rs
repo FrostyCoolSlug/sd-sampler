@@ -91,9 +91,6 @@ pub struct Engine {
 
     /// Whether the 'Add Sample' action is active
     add_armed: AtomicBool,
-
-    /// The last instance that was pressed
-    last_pressed: Mutex<Option<InstanceId>>,
 }
 
 static ENGINE: OnceLock<Arc<Engine>> = OnceLock::new();
@@ -124,7 +121,6 @@ impl Engine {
             wave_cache: WaveCache::new(),
             clear_armed: AtomicBool::new(false),
             add_armed: AtomicBool::new(false),
-            last_pressed: Mutex::new(None),
         }
     }
 
@@ -550,10 +546,7 @@ impl Engine {
 
         let mut map = self.recording.lock().unwrap();
         map.retain(|_, recorder| {
-            if recorder.handle.is_finished() {
-                return false;
-            }
-            true
+            !recorder.handle.is_finished()
         });
 
         if let Some(check) = &*self.background_record.lock().unwrap()

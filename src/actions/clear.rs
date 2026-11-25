@@ -2,10 +2,9 @@ use openaction::{async_trait, Action, Instance, InstanceId, OpenActionResult, ge
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
-use crate::actions::pad::PadActionSettings;
 use crate::engine::engine;
 use crate::svg;
-use crate::svg::{Glyph, IconKind, IconView, PadState, PadView};
+use crate::svg::{Glyph, IconKind, IconView};
 
 type SettingsLock = LazyLock<Mutex<HashSet<InstanceId>>>;
 static CLEARS: SettingsLock = LazyLock::new(Default::default);
@@ -17,7 +16,7 @@ fn remember(instance_id: &InstanceId) {
 
 fn forget(instance_id: &InstanceId) -> bool {
     CLEARS.lock().unwrap().remove(instance_id);
-    CLEARS.lock().unwrap().len() == 0
+    CLEARS.lock().unwrap().is_empty()
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -31,7 +30,7 @@ impl Action for ClearAction {
 
     async fn will_appear(&self, i: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
         remember(&i.instance_id);
-        let _ = draw_clear(i, false);
+        let _ = draw_clear(i, false).await;
         Ok(())
     }
 

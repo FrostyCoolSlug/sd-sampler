@@ -173,6 +173,11 @@ impl Action for PadAction {
 
         // If add mode is armed, hold to record a new sample onto this pad
         if local_engine.add_armed() {
+            // Disarm the append / add behaviour on a new pad
+            if s.tracks.is_empty() {
+                local_engine.set_add_armed(false);
+            }
+
             let name = format!("Recording_{}.wav", Local::now().format("%Y-%m-%dT%H%M%S"));
             let result = local_engine.record(&id, name.into());
             alert_on_error(i, result).await?;

@@ -30,7 +30,7 @@ impl Action for AddAction {
 
     async fn will_appear(&self, i: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
         remember(&i.instance_id);
-        let _ = draw_add(i, false);
+        let _ = draw_add(i, false).await;
         Ok(())
     }
 
