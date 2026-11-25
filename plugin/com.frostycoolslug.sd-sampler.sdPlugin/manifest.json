@@ -1,6 +1,6 @@
 {
   "Name": "SD Sampler",
-  "Version": "0.3.0.0",
+  "Version": "0.0.0.0",
   "Author": "sd-sampler",
   "Description": "A Sampler plugin inspired by the GoXLR",
   "Icon": "icons/plugin",
