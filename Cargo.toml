@@ -36,11 +36,14 @@ base64 = "0.23.1"
 
 ### Audio File Handling
 hound = "3.5"
-ebur128 = "0.1"
 rb = "0.4"
 atomic_float = "1"
-rubato = "5.0"
+rubato = "5.1"
 symphonia = { version = "0.6", default-features = false, features = ["wav", "ogg", "flac", "vorbis", "pcm", "mp3", "all-meta"] }
+
+# NOTE: Something was broken in 0.1.11 which results in all clips failing, so we'll pin .10 until I know the reason.
+ebur128 = "=0.1.10"
+
 
 ### PulseAudio Handlers
 cpal = "0.18.2"
