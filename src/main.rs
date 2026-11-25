@@ -6,6 +6,9 @@ pub mod globals;
 pub mod svg;
 mod wavecache;
 
+use crate::actions::add::draw_all_adds;
+use crate::actions::clear::draw_all_clears;
+use crate::actions::pad::draw_all_pads;
 use crate::engine::engine;
 use openaction::global_events::set_global_event_handler;
 use openaction::{OpenActionResult, register_action, run};
@@ -13,9 +16,6 @@ use std::env;
 use std::time::Duration;
 use tokio::select;
 use tokio::time::interval;
-use crate::actions::add::draw_all_adds;
-use crate::actions::clear::draw_all_clears;
-use crate::actions::pad::draw_all_pads;
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {

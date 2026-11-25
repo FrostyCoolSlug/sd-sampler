@@ -1,10 +1,10 @@
-use openaction::{async_trait, Action, Instance, InstanceId, OpenActionResult, get_instance};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::sync::{LazyLock, Mutex};
 use crate::engine::engine;
 use crate::svg;
 use crate::svg::{Glyph, IconKind, IconView};
+use openaction::{Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
 
 type SettingsLock = LazyLock<Mutex<HashSet<InstanceId>>>;
 static CLEARS: SettingsLock = LazyLock::new(Default::default);
@@ -45,7 +45,11 @@ impl Action for ClearAction {
         Ok(())
     }
 
-    async fn key_up(&self, _instance: &Instance, _settings: &Self::Settings) -> OpenActionResult<()> {
+    async fn key_up(
+        &self,
+        _instance: &Instance,
+        _settings: &Self::Settings,
+    ) -> OpenActionResult<()> {
         // Toggle the Global 'Armed' State
         let new = !engine().clear_armed();
         engine().set_clear_armed(new);
@@ -74,8 +78,16 @@ async fn draw_clear(instance: &Instance, blink: bool) -> OpenActionResult<()> {
     let view = IconView {
         glyph: Glyph::Clear,
         label: "CLEAR".to_string(),
-        sub: if armed { "Pick a Pad".to_string() } else { "".to_string() },
-        kind: if armed { IconKind::Armed } else { IconKind::Idle },
+        sub: if armed {
+            "Pick a Pad".to_string()
+        } else {
+            "".to_string()
+        },
+        kind: if armed {
+            IconKind::Armed
+        } else {
+            IconKind::Idle
+        },
         blink,
     };
 
@@ -83,4 +95,3 @@ async fn draw_clear(instance: &Instance, blink: bool) -> OpenActionResult<()> {
     let svg = svg::data_url(&svg::icon(&view));
     instance.set_image(Some(svg), None).await
 }
-

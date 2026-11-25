@@ -291,7 +291,11 @@ impl Engine {
         {
             let cache = self.peaks.lock().unwrap();
             if let Some(p) = cache.done.get(file) {
-                return if p.is_empty() { None } else { Some(pool_down(p, 40)) };
+                return if p.is_empty() {
+                    None
+                } else {
+                    Some(pool_down(p, 40))
+                };
             }
         }
 
@@ -545,9 +549,7 @@ impl Engine {
         });
 
         let mut map = self.recording.lock().unwrap();
-        map.retain(|_, recorder| {
-            !recorder.handle.is_finished()
-        });
+        map.retain(|_, recorder| !recorder.handle.is_finished());
 
         if let Some(check) = &*self.background_record.lock().unwrap()
             && check.handle.is_finished()

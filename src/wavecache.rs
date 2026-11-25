@@ -18,7 +18,7 @@ use directories::BaseDirs;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-use crate::audio::processors::peaks::{compute_peaks, WAVE_BUCKETS};
+use crate::audio::processors::peaks::{WAVE_BUCKETS, compute_peaks};
 
 /// A single cache entry. `path`, `mtime` and `size` are verified against the source on read so
 /// a stale (or hash-colliding) entry is dropped rather than trusted.
@@ -159,7 +159,10 @@ impl WaveCache {
             }
         }
 
-        debug!("Waveform Cache Cleanup Complete, {} Entries Live", live.len());
+        debug!(
+            "Waveform Cache Cleanup Complete, {} Entries Live",
+            live.len()
+        );
     }
 
     /// Write an entry for `path`, merging with any existing valid one so a peaks-only or
@@ -174,7 +177,10 @@ impl WaveCache {
         let merged_peaks = if !peaks.is_empty() {
             peaks.to_vec()
         } else {
-            existing.as_ref().map(|e| e.peaks.clone()).unwrap_or_default()
+            existing
+                .as_ref()
+                .map(|e| e.peaks.clone())
+                .unwrap_or_default()
         };
         let merged_gain = gain.or_else(|| existing.and_then(|e| e.gain));
 
@@ -192,9 +198,11 @@ impl WaveCache {
 
         // Write to a temp file and rename so a crash mid-write can't leave a half entry.
         let final_path = self.dir.join(key(path));
-        let tmp = self
-            .dir
-            .join(format!("{}.tmp{:08x}", key(path), fastrand::u64(0..u32::MAX as u64)));
+        let tmp = self.dir.join(format!(
+            "{}.tmp{:08x}",
+            key(path),
+            fastrand::u64(0..u32::MAX as u64)
+        ));
 
         if fs::write(&tmp, serde_json::to_vec(&entry).unwrap_or_default()).is_ok() {
             let _ = fs::rename(&tmp, &final_path);

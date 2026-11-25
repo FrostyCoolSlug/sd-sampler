@@ -137,7 +137,11 @@ impl Player {
         let track_id = track.id;
 
         // Grab the Audio Codec Parameters for the track
-        let audio_params = match track.codec_params.as_ref().and_then(|params| params.audio()) {
+        let audio_params = match track
+            .codec_params
+            .as_ref()
+            .and_then(|params| params.audio())
+        {
             Some(params) => params,
             None => bail!("Unable to find Audio Codec Parameters"),
         };
@@ -445,7 +449,6 @@ impl Player {
         }
         decoder.finalize();
         result.map_err(|e| anyhow!(e))
-
     }
 
     fn processed(total_frames: Option<u64>, current_frame: u64, channels: usize) -> u8 {

@@ -1,10 +1,10 @@
-use openaction::{async_trait, Action, Instance, InstanceId, OpenActionResult, get_instance};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::sync::{LazyLock, Mutex};
 use crate::engine::engine;
 use crate::svg;
 use crate::svg::{Glyph, IconKind, IconView};
+use openaction::{Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
 
 type SettingsLock = LazyLock<Mutex<HashSet<InstanceId>>>;
 static ADDS: SettingsLock = LazyLock::new(Default::default);
@@ -45,7 +45,11 @@ impl Action for AddAction {
         Ok(())
     }
 
-    async fn key_up(&self, _instance: &Instance, _settings: &Self::Settings) -> OpenActionResult<()> {
+    async fn key_up(
+        &self,
+        _instance: &Instance,
+        _settings: &Self::Settings,
+    ) -> OpenActionResult<()> {
         // Toggle the Global 'Armed' State
         let new = !engine().add_armed();
         engine().set_add_armed(new);
@@ -76,8 +80,16 @@ async fn draw_add(instance: &Instance, blink: bool) -> OpenActionResult<()> {
     let view = IconView {
         glyph: Glyph::Record,
         label: "ADD".to_string(),
-        sub: if armed { "Pick a Pad".to_string() } else { "".to_string() },
-        kind: if armed { IconKind::Armed } else { IconKind::Idle },
+        sub: if armed {
+            "Pick a Pad".to_string()
+        } else {
+            "".to_string()
+        },
+        kind: if armed {
+            IconKind::Armed
+        } else {
+            IconKind::Idle
+        },
         blink,
     };
 

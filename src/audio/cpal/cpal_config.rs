@@ -1,9 +1,9 @@
 use anyhow::{Result, anyhow};
 use cpal::traits::HostTrait;
 use cpal::{Device, DeviceId};
+use log::info;
 use std::str::FromStr;
 use std::sync::OnceLock;
-use log::{info};
 
 /// A process wide cpal Host, so we're not establishing new connections for every
 /// lookup.

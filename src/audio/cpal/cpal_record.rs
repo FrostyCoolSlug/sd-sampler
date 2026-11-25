@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use crate::audio::backend::{AudioInput, AudioSpecification, OpenInputStream};
+use crate::audio::cpal::cpal_config::CpalConfiguration;
 use anyhow::{Result, bail};
 use cpal::traits::{DeviceTrait, StreamTrait};
 use log::warn;
 use rb::{Consumer, RB, RbConsumer, RbProducer, SpscRb};
-use crate::audio::backend::{AudioInput, AudioSpecification, OpenInputStream};
-use crate::audio::cpal::cpal_config::CpalConfiguration;
 
 pub struct CpalRecord {
     stream: cpal::Stream,
