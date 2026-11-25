@@ -10,8 +10,7 @@ use anyhow::anyhow;
 use chrono::Local;
 use log::warn;
 use openaction::{
-    Action, Instance, InstanceId, OpenActionResult, async_trait, get_global_settings, get_instance,
-    set_global_settings,
+    Action, Instance, InstanceId, OpenActionResult, async_trait, get_instance, set_global_settings,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
