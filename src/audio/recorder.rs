@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{fs, vec};
 
 use super::backend::{AudioInput, AudioSpecification, get_input};
@@ -85,7 +85,9 @@ impl BufferedRecorder {
 
         // We need to find a matching input..
         let mut input: Option<Box<dyn AudioInput>> = None;
-        let mut now = Instant::now();
+
+        #[cfg(windows)]
+        let mut now = std::time::Instant::now();
 
         while !self.stop.load(Ordering::Relaxed) {
             if input.is_none() {
@@ -138,6 +140,8 @@ impl BufferedRecorder {
 
             #[cfg(windows)]
             {
+                use std::time::Instant;
+
                 if now.elapsed() > CHECK_PERIOD {
                     now = Instant::now();
 
