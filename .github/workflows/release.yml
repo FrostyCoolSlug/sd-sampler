@@ -20,7 +20,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       release: ${{ steps.v.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check Cargo.lock is in sync
         run: |
@@ -58,7 +58,7 @@ jobs:
           - { os: macos-latest,   target: x86_64-apple-darwin,      bin: sd-sampler }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -75,7 +75,7 @@ jobs:
       - run: cargo build --release --locked --target ${{ matrix.target }}
 
       # A single file path means the artifact contains just the binary, no target/ nesting
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bin-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.bin }}
@@ -85,9 +85,9 @@ jobs:
     needs: [version, build]
     runs-on: macos-latest   # lipo and codesign only exist on macOS
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -97,7 +97,7 @@ jobs:
       - name: Build property inspector
         run: cd web && npm ci && npm run build
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist   # dist/bin-<target>/<binary>
 
@@ -133,12 +133,12 @@ jobs:
           (cd "$STAGE" && zip -qrX "$STAGE/out.zip" "$ID")
           mv "$STAGE/out.zip" "out/$ID"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin
           path: out/${{ env.ID }}
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.version.outputs.version }}
           target_commitish: ${{ github.sha }}
