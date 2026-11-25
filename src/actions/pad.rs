@@ -310,7 +310,15 @@ impl Action for PadAction {
 
         tokio::spawn(async move {
             let sample = engine().samples_dir().join(file.clone());
-            let gain = blocking(move || normalised_gain(sample)).await;
+            let cache = engine().wave_cache().clone();
+            let gain = blocking(move || match cache.gain(&sample) {
+                Some(gain) => Ok(gain),
+                None => {
+                    let gain = normalised_gain(sample.to_path_buf())?;
+                    cache.store_gain(&sample, gain);
+                    Ok(gain)
+                }
+            }).await;
             ADDING.lock().unwrap().remove(&id);
 
             let Some(instance) = get_instance(id.clone()).await else {

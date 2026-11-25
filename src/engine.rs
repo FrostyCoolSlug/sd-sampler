@@ -439,10 +439,10 @@ impl Engine {
             .to_string_lossy()
             .to_string();
 
-        Ok(Some(Recorded {
-            file,
-            gain: recording.state.gain.load(Ordering::Relaxed),
-        }))
+        let gain = recording.state.gain.load(Ordering::Relaxed);
+        self.wave_cache.store_gain(&recording.path, gain);
+
+        Ok(Some(Recorded { file, gain }))
     }
 
     pub fn is_recording(&self, instance: &InstanceId) -> bool {
